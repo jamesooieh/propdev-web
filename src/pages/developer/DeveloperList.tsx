@@ -5,8 +5,9 @@ import {
 import { useHistory } from 'react-router-dom';
 import { DeveloperService, Developer, DeveloperParams } from '../../services/developer';
 import {
-    DeveloperStatus, DeveloperStatusLabels, CountryLabels
+    DeveloperStatus, DeveloperStatusLabels, getCountryLabel
 } from '../../enums';
+import PageHeader from '../../components/common/PageHeader';
 
 // MRT Imports
 import {
@@ -121,25 +122,44 @@ const DeveloperList: React.FC = () => {
         () => [
             {
                 accessorKey: 'name',
-                header: 'Company Name',
+                header: 'Developer', // Changed from 'Company Name'
                 size: 250,
                 Cell: ({ row }) => (
                     <Box>
                         <Typography variant="body2" fontWeight="bold">
                             {row.original.name}
                         </Typography>
+                        {/* Kept the city/country subtitle as it's useful context */}
                         <Typography variant="caption" color="textSecondary">
-                            {row.original.city}, {row.original.country ? CountryLabels[row.original.country] : ''}
+                            {row.original.city}, {row.original.country ? getCountryLabel(row.original.country) : ''}
                         </Typography>
                     </Box>
                 ),
             },
-            { accessorKey: 'reg_no', header: 'Reg No', size: 150 },
-            { accessorKey: 'contact_person', header: 'Contact', size: 150 },
+            {
+                accessorKey: 'license_no',
+                header: 'License No',
+                size: 160,
+            },
+            {
+                accessorKey: 'contact_person',
+                header: 'Contact Person',
+                size: 120,
+            },
+            {
+                accessorKey: 'email', // New Column
+                header: 'Email',
+                size: 150,
+            },
+            {
+                accessorKey: 'phone_mobile', // New Column
+                header: 'Contact No',
+                size: 130,
+            },
             {
                 accessorKey: 'status',
                 header: 'Status',
-                size: 120,
+                size: 100,
                 Cell: ({ cell }) => {
                     const status = cell.getValue<DeveloperStatus>();
                     return (
@@ -208,7 +228,10 @@ const DeveloperList: React.FC = () => {
     return (
         <IonPage>
             <IonContent fullscreen>
-                <Box sx={{ p: 3, bgcolor: '#f5f5f5', minHeight: '100vh' }}>
+                {/* Header */}
+                <PageHeader title="Developer Management" />
+
+                <Box sx={{ p: 3, bgcolor: '#f5f5f5', minHeight: 'calc(100vh - 64px)' }}>
                     <Container maxWidth="xl">
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                             <Typography variant="h5" fontWeight="bold">Developer Management</Typography>

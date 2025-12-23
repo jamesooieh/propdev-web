@@ -25,6 +25,8 @@ import '@ionic/react/css/palettes/dark.system.css';
 import './theme/variables.css';
 import DeveloperList from './pages/developer/DeveloperList';
 import DeveloperForm from './pages/developer/DeveloperForm';
+import LandList from './pages/lands/LandList';
+import LandForm from './pages/lands/LandForm';
 
 setupIonicReact();
 
@@ -82,6 +84,11 @@ const AppRoutes: React.FC = () => {
       <PrivateRoute exact path="/developers" component={DeveloperList} />
       <PrivateRoute exact path="/developers/create" component={DeveloperForm} />
       <PrivateRoute exact path="/developers/edit/:id" component={DeveloperForm} />
+
+      {/* Land Routes */}
+      <PrivateRoute exact path="/lands" component={LandList} />
+      <PrivateRoute exact path="/lands/create" component={LandForm} />
+      <PrivateRoute exact path="/lands/edit/:id" component={LandForm} />
 
       {/* Default Redirect */}
       <Route exact path="/">

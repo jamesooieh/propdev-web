@@ -8,6 +8,7 @@ export interface User {
     name: string;
     email: string;
     roles?: Role[];
+    abilities: string[];
     // Add other fields (role, avatar, etc.) as needed
 }
 

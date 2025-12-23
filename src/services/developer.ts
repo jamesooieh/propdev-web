@@ -28,6 +28,7 @@ export interface DeveloperParams {
     sort?: string;
     direction?: 'asc' | 'desc';
     search?: string;
+    get_all?: 1 | 0 | boolean;
 }
 
 // Full path based on your route prefixes: /api/developer/developers
@@ -37,9 +38,8 @@ export const DeveloperService = {
     
     getAll: async (params?: DeveloperParams) => {
         const response = await api.get(BASE_URL, { params });
-        // Laravel paginate() returns: { data: [...], meta: { total, per_page, current_page, ... } }
-        // or { data: [...], current_page, total, ... } depending on Resource wrapping.
-        // We assume standard Resource Collection wrapping:
+        // If get_all=1, response.data will be { data: Developer[] } without meta.
+        // If paginated, response.data will be { data: Developer[], meta: {...} }
         return response.data; 
     },
 
