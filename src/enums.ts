@@ -42,6 +42,51 @@ export const LandTenureTypeLabels: Record<LandTenureType, string> = {
 };
 
 // --------------------------------------------------------------------------
+// Project Status
+// --------------------------------------------------------------------------
+export enum ProjectStatus {
+    PLANNING = 'P',
+    APPROVED = 'A',
+    PROGRESS = 'G',
+    COMPLETED = 'C',
+    CANCELLED = 'X',
+}
+
+export const ProjectStatusLabels: Record<ProjectStatus, string> = {
+    [ProjectStatus.PLANNING]: 'Planning',
+    [ProjectStatus.APPROVED]: 'Approved',
+    [ProjectStatus.PROGRESS]: 'In Progress',
+    [ProjectStatus.COMPLETED]: 'Completed',
+    [ProjectStatus.CANCELLED]: 'Cancelled',
+};
+
+// --------------------------------------------------------------------------
+// Category Status
+// --------------------------------------------------------------------------
+export enum CategoryStatus {
+    ACTIVE = 'A',
+    INACTIVE = 'X',
+}
+
+export const CategoryStatusLabels: Record<CategoryStatus, string> = {
+    [CategoryStatus.ACTIVE]: 'Active',
+    [CategoryStatus.INACTIVE]: 'Inactive',
+};
+
+// --------------------------------------------------------------------------
+// Group Status
+// --------------------------------------------------------------------------
+export enum GroupStatus {
+    ACTIVE = 'A',
+    INACTIVE = 'X',
+}
+
+export const GroupStatusLabels: Record<GroupStatus, string> = {
+    [GroupStatus.ACTIVE]: 'Active',
+    [GroupStatus.INACTIVE]: 'Inactive',
+};
+
+// --------------------------------------------------------------------------
 // Country
 // --------------------------------------------------------------------------
 // --------------------------------------------------------------------------

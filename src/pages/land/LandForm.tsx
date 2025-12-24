@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { IonContent, IonPage } from '@ionic/react';
 import { useHistory, useParams } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
@@ -7,7 +7,6 @@ import { isSystemRoot } from '../../services/auth';
 
 // Services
 import { LandService } from '../../services/land';
-import { DeveloperService, Developer } from '../../services/developer';
 
 // Enums
 import {
@@ -21,7 +20,7 @@ import PageHeader from '../../components/common/PageHeader';
 import {
     Container, Box, Typography, Button, Paper, TextField,
     MenuItem, Grid, CircularProgress, Alert, Divider
-} from '@mui/material'; // Ensure this uses the latest Grid (v2) if using MUI 6+
+} from '@mui/material';
 import { Save } from '@mui/icons-material';
 import { DeveloperSelect } from '../../components/common/DeveloperSelect';
 
@@ -33,8 +32,9 @@ const LandForm: React.FC = () => {
     const isRoot = isSystemRoot(user);
 
     // --- Form Setup ---
+    // Destructure 'reset' here
     const {
-        register, handleSubmit, control, setValue, watch,
+        register, handleSubmit, control, setValue, watch, reset, 
         formState: { errors }
     } = useForm({
         defaultValues: {
@@ -66,28 +66,58 @@ const LandForm: React.FC = () => {
     const tenureType = watch('tenure_type');
     const isLeasehold = tenureType === LandTenureType.LEASEHOLD;
 
+    // Create a ref for the IonContent
+    const contentRef = useRef<HTMLIonContentElement>(null);
+
+    // Scroll to top whenever an error appears
+    useEffect(() => {
+        if (submitError) {
+            // Scroll to top over 500ms
+            contentRef.current?.scrollToTop(500);
+        }
+    }, [submitError]);
+
     // --- Load Land Data ---
     useEffect(() => {
         if (isEditMode) {
             setLoading(true);
             LandService.getById(id)
-                .then(data => {
-                    Object.keys(data).forEach(key => setValue(key as any, data[key]));
-                    if (isRoot && data.developer_id) {
-                        setValue('developer_id', data.developer_id);
+                .then(response => {
+                    // FIX 1: Unwrap the data. 
+                    // Laravel Resources return { data: { ... } }. 
+                    // We check if .data exists, otherwise use response directly.
+                    const actualData = response.data || response;
+
+                    // FIX 2: Use reset() instead of looping setValue
+                    // This populates the form and correctly sets 'isDirty' to false initially.
+                    reset(actualData);
+
+                    // FIX 3: Explicitly set developer_id if Root (sometimes needed if the field name varies)
+                    if (isRoot && actualData.developer_id) {
+                        setValue('developer_id', actualData.developer_id);
                     }
                 })
-                .catch(err => setSubmitError("Could not load land details."))
+                .catch(err => {
+                    console.error(err);
+                    setSubmitError("Could not load land details.");
+                })
                 .finally(() => setLoading(false));
         }
-    }, [id, isEditMode, setValue, isRoot]);
+    }, [id, isEditMode, setValue, reset, isRoot]);
 
     // --- Submit ---
     const onSubmit = async (data: any) => {
         setLoading(true);
         setSubmitError(null);
 
-        // Validation cleanup: Clear lease data if Freehold
+        // 1. CLEANUP: Remove developer_id if not Root
+        // This ensures non-root users can never overwrite the developer ID, 
+        // even if reset() accidentally loaded it into the form state.
+        if (!isRoot) {
+            delete data.developer_id;
+        }
+
+        // 2. CLEANUP: Leasehold Logic
         if (data.tenure_type !== LandTenureType.LEASEHOLD) {
             data.lease_duration = null;
             data.lease_expiry = null;
@@ -114,7 +144,7 @@ const LandForm: React.FC = () => {
 
     return (
         <IonPage>
-            <IonContent fullscreen>
+            <IonContent fullscreen ref={contentRef}>
                 <PageHeader title={isEditMode ? 'Edit Land' : 'Add Land'} showBackButton={true} />
 
                 <Box sx={{ p: 3, bgcolor: '#f5f5f5', minHeight: 'calc(100vh - 64px)' }}>
@@ -140,14 +170,13 @@ const LandForm: React.FC = () => {
                                                     rules={{ required: 'Developer is required for Root users' }}
                                                     error={!!errors.developer_id}
                                                     helperText={errors.developer_id?.message}
+                                                    disabled={isEditMode}
                                                 />
                                             </Grid>
                                         </Grid>
                                         <Divider sx={{ mt: 3 }} />
                                     </Box>
                                 )}
-
-
 
                                 {/* --- SECTION 1: LOCATION --- */}
                                 <Typography variant="subtitle1" fontWeight="bold" color="primary" sx={{ mb: 2 }}>
@@ -202,9 +231,11 @@ const LandForm: React.FC = () => {
 
                                 {/* --- SECTION 2: LOT INFO --- */}
                                 <Grid container spacing={2} sx={{ mb: 4 }}>
-                                    <Typography variant="subtitle1" fontWeight="bold" color="primary" sx={{ mb: 2 }}>
-                                        Lot Information
-                                    </Typography>
+                                    <Grid size={{ xs: 12 }}>
+                                        <Typography variant="subtitle1" fontWeight="bold" color="primary" sx={{ mb: 2 }}>
+                                            Lot Information
+                                        </Typography>
+                                    </Grid>
                                     <Grid size={{ xs: 12, md: 12 }}>
                                         <TextField
                                             fullWidth label="Lot No (No Lot)" required
@@ -215,7 +246,7 @@ const LandForm: React.FC = () => {
                                     </Grid>
                                     <Grid size={{ xs: 6, md: 6 }}>
                                         <TextField
-                                            fullWidth label="Lot Area (Luas Lot) (square metre)"
+                                            fullWidth label="Lot Area (Luas Lot)"
                                             {...register('size')}
                                             slotProps={{ inputLabel: { shrink: true } }}
                                         />
@@ -294,7 +325,7 @@ const LandForm: React.FC = () => {
 
                                 <Divider sx={{ my: 3 }} />
 
-                                {/* --- SECTION 3: STATUS DETAILS --- */}
+                                {/* --- SECTION 4: STATUS DETAILS --- */}
                                 <Typography variant="subtitle1" fontWeight="bold" color="primary" sx={{ mb: 2 }}>
                                     Status
                                 </Typography>
@@ -323,7 +354,7 @@ const LandForm: React.FC = () => {
 
                                 <Divider sx={{ my: 3 }} />
 
-                                {/* --- SECTION 4: CONDITIONS & PLANNING --- */}
+                                {/* --- SECTION 5: CONDITIONS & PLANNING --- */}
                                 <Typography variant="subtitle1" fontWeight="bold" color="primary" sx={{ mb: 2 }}>
                                     Planning & Conditions
                                 </Typography>

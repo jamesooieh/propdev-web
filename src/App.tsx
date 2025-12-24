@@ -25,8 +25,11 @@ import '@ionic/react/css/palettes/dark.system.css';
 import './theme/variables.css';
 import DeveloperList from './pages/developer/DeveloperList';
 import DeveloperForm from './pages/developer/DeveloperForm';
-import LandList from './pages/lands/LandList';
-import LandForm from './pages/lands/LandForm';
+import LandList from './pages/land/LandList';
+import LandForm from './pages/land/LandForm';
+import ProjectList from './pages/project/ProjectList';
+import ProjectForm from './pages/project/ProjectForm';
+import ProjectDashboard from './pages/project/ProjectDashboard';
 
 setupIonicReact();
 
@@ -89,6 +92,12 @@ const AppRoutes: React.FC = () => {
       <PrivateRoute exact path="/lands" component={LandList} />
       <PrivateRoute exact path="/lands/create" component={LandForm} />
       <PrivateRoute exact path="/lands/edit/:id" component={LandForm} />
+
+      {/* Project Routes */}
+      <PrivateRoute exact path="/projects" component={ProjectList} />
+      <PrivateRoute exact path="/projects/create" component={ProjectForm} />
+      <PrivateRoute exact path="/projects/edit/:id" component={ProjectForm} />
+      <PrivateRoute exact path="/projects/dashboard/:id" component={ProjectDashboard} />
 
       {/* Default Redirect */}
       <Route exact path="/">

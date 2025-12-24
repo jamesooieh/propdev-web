@@ -13,6 +13,7 @@ interface DeveloperSelectProps<T extends FieldValues> {
     required?: boolean;
     error?: boolean;
     helperText?: string;
+    disabled?: boolean;
 }
 
 export const DeveloperSelect = <T extends FieldValues>({
@@ -22,7 +23,8 @@ export const DeveloperSelect = <T extends FieldValues>({
     rules,
     required = false,
     error,
-    helperText
+    helperText,
+    disabled = false,
 }: DeveloperSelectProps<T>) => {
     const [developers, setDevelopers] = useState<Developer[]>([]);
     const [loading, setLoading] = useState(false);
@@ -59,16 +61,24 @@ export const DeveloperSelect = <T extends FieldValues>({
                     required={required}
                     error={error}
                     helperText={helperText}
+                    disabled={disabled}
                     // 1. Ensure the INPUT only shows the Name (not the subtext)
-                    SelectProps={{
-                        renderValue: (selected: any) => {
-                            if (!selected) return '';
-                            const dev = developers.find(d => d.id === selected);
-                            return dev ? dev.name : selected;
-                        }
-                    }}
+                    // SelectProps={{
+                    //     renderValue: (selected: any) => {
+                    //         if (!selected) return '';
+                    //         const dev = developers.find(d => d.id === selected);
+                    //         return dev ? dev.name : selected;
+                    //     }
+                    // }}
                     slotProps={{
                         inputLabel: { shrink: true },
+                        select: {
+                            renderValue: (selected: any) => {
+                                if (!selected) return '';
+                                const dev = developers.find(d => d.id === selected);
+                                return dev ? dev.name : selected;
+                            }
+                        },
                         input: {
                             endAdornment: loading ? (
                                 <CircularProgress size={20} color="inherit" sx={{ mr: 4 }} />

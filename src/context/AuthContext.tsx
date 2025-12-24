@@ -15,6 +15,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Start true so we don't kick the user out before checking storage
     const [isLoading, setIsLoading] = useState<boolean>(true);
 
+    // Helper to handle Context Hash
+    const handleContextHash = (userData: User | null) => {
+        if (userData?.meta?.active_hash) {
+            // Save hash for the API interceptor
+            localStorage.setItem('active_context_hash', userData.meta.active_hash);
+        } else {
+            // Clear if not present (e.g., user is global root without context)
+            localStorage.removeItem('active_context_hash');
+        }
+    };
+
     // On App Start: Check if user is already logged in (persisted in device storage)
     useEffect(() => {
         const initAuth = async () => {
@@ -22,6 +33,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 const storedUser = await AuthService.getCurrentUser();
                 if (storedUser) {
                     setUser(storedUser);
+
+                    // Sync hash on app reload
+                    handleContextHash(storedUser);
                 }
             } catch (error) {
                 console.error("Auth Init Failed", error);
@@ -37,12 +51,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // AuthService.login throws an error if it fails, which the UI component catches
         const userData = await AuthService.login(credentials);
         setUser(userData);
+
+        // Sync hash on fresh login
+        handleContextHash(userData);
     };
 
     // Logout Action
     const logout = async () => {
         await AuthService.logout();
         setUser(null);
+
+        // Clear hash on logout
+        localStorage.removeItem('active_context_hash');
     };
 
     return (

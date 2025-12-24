@@ -18,10 +18,26 @@ const api = axios.create({
  * Before any request is sent, check for a token and attach it.
  */
 api.interceptors.request.use(async (config) => {
+    // 1. Handle Auth Token (Your existing code)
     const { value } = await Preferences.get({ key: 'auth_token' });
     if (value) {
         config.headers.Authorization = `Bearer ${value}`;
     }
+
+    // 2. Handle Developer Context (New Logic)
+    // We can use standard localStorage for this lightweight string, 
+    // or you can use Preferences if you prefer consistency.
+    const contextHash = localStorage.getItem('active_context_hash');
+
+    if (contextHash) {
+        // Append 't' to params. 
+        // We create a new object to preserve any existing params (like page=1)
+        config.params = {
+            ...config.params,
+            t: contextHash 
+        };
+    }
+
     return config;
 });
 
@@ -33,7 +49,10 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        // You could trigger a global logout here if you wanted
+        // Optional: specific check for 403 Context errors
+        if (error.response?.status === 403 && error.response?.data?.message?.includes('Context')) {
+            console.error("Context Error: ", error.response.data.message);
+        }
         return Promise.reject(error);
     }
 );

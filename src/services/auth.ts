@@ -2,14 +2,22 @@ import { Device } from '@capacitor/device';
 import api from './api';
 import { Preferences } from '@capacitor/preferences';
 
-// 1. Define Types based on your Backend Models
 export interface User {
     id: number;
     name: string;
     email: string;
+
+    meta?: UserMeta;
+
     roles?: Role[];
     abilities: string[];
     // Add other fields (role, avatar, etc.) as needed
+}
+
+export interface UserMeta {
+    active_scope?: number | null;
+    assigned_scopes?: number[];
+    active_hash?: string | null;
 }
 
 export interface Role {
@@ -48,10 +56,10 @@ export const hasRole = (user: User | null, roleName: string): boolean => {
  * Specific Helper for System Root
  */
 export const isSystemRoot = (user: User | null): boolean => {
-    return hasRole(user, 'root'); 
+    return hasRole(user, 'root');
 };
 
-export const AuthService = {  
+export const AuthService = {
     /**
      * Helper: Get a useful Device Name
      */
@@ -74,7 +82,7 @@ export const AuthService = {
             return 'Ionic App'; // Fallback if plugin fails
         }
     },
-    
+
     /**
      * LOGIN
      * 1. Posts credentials + device_name to backend.
@@ -100,7 +108,7 @@ export const AuthService = {
 
         // Step 4: Fetch User
         const userResponse = await api.get('/auth/user');
-        
+
         // Handle potentially wrapped resource response
         const user: User = userResponse.data.data || userResponse.data;
 

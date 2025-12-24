@@ -222,7 +222,10 @@ const DeveloperList: React.FC = () => {
                 Refresh
             </Button>
         ),
-        muiTablePaperProps: { elevation: 2, sx: { borderRadius: '8px' } }
+        muiTablePaperProps: { elevation: 2, sx: { borderRadius: '8px' } },
+
+        // --- DISABLE FILTERS ---
+        enableColumnFilters: false, // Hides inputs under column headers
     });
 
     return (

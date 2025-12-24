@@ -100,6 +100,13 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, showBackButton = false }
                                     Land Bank
                                 </MenuItem>
                             )}
+
+                            {/* Permission Check: Lands */}
+                            {can('view-projects') && (
+                                <MenuItem onClick={() => handleNavigate('/projects')}>
+                                    Projects
+                                </MenuItem>
+                            )}
                         </Menu>
                     </>
                 )}

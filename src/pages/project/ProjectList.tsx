@@ -1,9 +1,9 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { IonContent, IonPage, useIonViewWillEnter } from '@ionic/react';
 import { useHistory } from 'react-router-dom';
-import { LandService, Land, LandParams } from '../../services/land';
-import { LandStatus, LandStatusLabels, LandTenureTypeLabels, MalaysiaStateLabels, MalaysiaState, LandTenureType } from '../../enums';
-import { usePermission } from '../../hooks/usePermission'; // <--- Your new hook
+import { ProjectService, ProjectParams, Project } from '../../services/project'; // Ensure this service exists
+import { ProjectStatus, ProjectStatusLabels } from '../../enums'; // Ensure Enums exist
+import { usePermission } from '../../hooks/usePermission';
 
 // UI Components
 import PageHeader from '../../components/common/PageHeader';
@@ -18,14 +18,14 @@ import {
     Container, Box, Typography, Button, Alert, IconButton, Chip, Tooltip,
     Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle
 } from '@mui/material';
-import { Add, Edit, Delete, Refresh, Warning } from '@mui/icons-material';
+import { Add, Edit, Delete, Refresh, Visibility, Warning } from '@mui/icons-material';
 
-const LandList: React.FC = () => {
+const ProjectList: React.FC = () => {
     const history = useHistory();
-    const { can } = usePermission(); // Initialize Permission Hook
+    const { can } = usePermission();
 
     // --- State ---
-    const [data, setData] = useState<Land[]>([]);
+    const [data, setData] = useState<Project[]>([]);
     const [totalRows, setTotalRows] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -35,114 +35,103 @@ const LandList: React.FC = () => {
     const [sorting, setSorting] = useState<MRT_SortingState>([{ id: 'created_at', desc: true }]);
     const [pagination, setPagination] = useState<MRT_PaginationState>({ pageIndex: 0, pageSize: 10 });
 
-    // Delete Dialog
+    // Delete Dialog State
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [idToDelete, setIdToDelete] = useState<string | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
     // --- Fetch Data ---
-    const fetchLands = async () => {
-        if (!can('view-lands')) return; // Basic guard
+    const fetchProjects = async () => {
+        if (!can('view-projects')) return;
 
         setLoading(true);
         setError(null);
         try {
-            const queryParams: LandParams = {
+            const queryParams: ProjectParams = {
                 page: pagination.pageIndex + 1,
                 per_page: pagination.pageSize,
                 search: globalFilter || undefined,
                 sort: sorting.length > 0 ? sorting[0].id : 'created_at',
                 direction: (sorting.length > 0 ? (sorting[0].desc ? 'desc' : 'asc') : 'desc') as 'asc' | 'desc',
             };
-            const res = await LandService.getAll(queryParams);
+            const res = await ProjectService.getAll(queryParams);
             setData(res.data);
             setTotalRows(res.meta?.total || res.total || 0);
         } catch (err: any) {
             console.error(err);
-            setError("Failed to load lands.");
+            setError("Failed to load projects.");
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => { fetchLands(); }, [pagination.pageIndex, pagination.pageSize, sorting, globalFilter]);
-    useIonViewWillEnter(() => { fetchLands(); });
+    useEffect(() => { fetchProjects(); }, [pagination.pageIndex, pagination.pageSize, sorting, globalFilter]);
+    useIonViewWillEnter(() => { fetchProjects(); });
 
     // --- Delete Logic ---
     const confirmDelete = async () => {
         if (!idToDelete) return;
         setIsDeleting(true);
         try {
-            await LandService.delete(idToDelete);
+            await ProjectService.delete(idToDelete);
             setDeleteDialogOpen(false);
             setIdToDelete(null);
-            fetchLands();
+            fetchProjects();
         } catch (err) {
-            alert("Failed to delete.");
+            alert("Failed to delete project.");
         } finally {
             setIsDeleting(false);
         }
     };
 
     // --- Columns ---
-    const columns = useMemo<MRT_ColumnDef<Land>[]>(
+    const columns = useMemo<MRT_ColumnDef<Project>[]>(
         () => [
             {
-                accessorKey: 'lot',
-                header: 'Land Details',
+                accessorKey: 'title',
+                header: 'Project Title',
                 size: 250,
                 Cell: ({ row }) => (
-                    <Box>
-                        <Typography variant="body2" fontWeight="bold">Lot {row.original.lot}</Typography>
-                        <Typography variant="caption" color="textSecondary">
-                            {row.original.town}, {MalaysiaStateLabels[row.original.state as MalaysiaState]}
-                        </Typography>
-                    </Box>
+                    <Typography variant="body2" fontWeight="bold">
+                        {row.original.title}
+                    </Typography>
                 ),
             },
             {
-                accessorKey: 'tenure_type',
-                header: 'Tenure',
+                accessorKey: 'asp_no',
+                header: 'ASP No.',
                 size: 150,
-                Cell: ({ cell, row }) => (
-                    <Box>
-                        <Typography variant="body2">
-                            {LandTenureTypeLabels[cell.getValue<LandTenureType>()]}
-                        </Typography>
-                        {/* Show expiry if Leasehold */}
-                        {cell.getValue<string>() === 'leasehold' && row.original.lease_expiry && (
-                            <Typography variant="caption" color="textSecondary">
-                                Exp: {row.original.lease_expiry}
-                            </Typography>
-                        )}
-                    </Box>
+                Cell: ({ cell }) => (
+                    <Typography variant="body2">{cell.getValue<string>() || '-'}</Typography>
                 )
             },
             {
-                accessorKey: 'zoning',
-                header: 'Zoning',
-                size: 120,
+                accessorKey: 'do_no',
+                header: 'DO No.',
+                size: 150,
+                Cell: ({ cell }) => (
+                    <Typography variant="body2">{cell.getValue<string>() || '-'}</Typography>
+                )
             },
             {
                 accessorKey: 'status',
                 header: 'Status',
-                size: 100,
+                size: 120,
                 Cell: ({ cell }) => {
-                    const status = cell.getValue<LandStatus>();
+                    const status = cell.getValue<ProjectStatus>();
 
-                    // Define color mapping for your specific statuses
-                    const statusColors: Record<LandStatus, "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning"> = {
-                        [LandStatus.ACQUIRED]: 'info',      // Blue (In possession)
-                        [LandStatus.DEVELOPED]: 'success',  // Green (Completed)
-                        [LandStatus.DISPOSED]: 'default',   // Grey (No longer active)
+                    // Adjust colors based on your Enum logic
+                    const statusColors: Record<string, "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning"> = {
+                        'active': 'success',
+                        'completed': 'info',
+                        'pending': 'warning',
+                        'archived': 'default'
                     };
 
                     return (
                         <Chip
-                            // Use the label map, fallback to the raw code if missing
-                            label={LandStatusLabels[status] || status}
+                            label={ProjectStatusLabels[status] || status}
                             size="small"
-                            // Look up the color, default to 'default' if undefined
                             color={statusColors[status] || 'default'}
                             variant="outlined"
                         />
@@ -158,7 +147,7 @@ const LandList: React.FC = () => {
         data,
         manualPagination: true,
         manualSorting: true,
-        manualFiltering: true,
+        manualFiltering: true, // Backend handles search
         rowCount: totalRows,
         state: { isLoading: loading, showProgressBars: loading, pagination, sorting, globalFilter },
         onPaginationChange: setPagination,
@@ -168,18 +157,21 @@ const LandList: React.FC = () => {
         positionActionsColumn: 'last',
         renderRowActions: ({ row }) => (
             <Box sx={{ display: 'flex', gap: '0.5rem' }}>
-
-                {/* CHECK PERMISSION: Update */}
-                {can('update-lands') && (
+                {can('view-projects') && (
+                    <Tooltip title="View Dashboard">
+                        <IconButton color="info" onClick={() => history.push(`/projects/dashboard/${row.original.id}`)}>
+                            <Visibility />
+                        </IconButton>
+                    </Tooltip>
+                )}
+                {can('update-projects') && (
                     <Tooltip title="Edit">
-                        <IconButton color="primary" onClick={() => history.push(`/lands/edit/${row.original.id}`)}>
+                        <IconButton color="primary" onClick={() => history.push(`/projects/edit/${row.original.id}`)}>
                             <Edit />
                         </IconButton>
                     </Tooltip>
                 )}
-
-                {/* CHECK PERMISSION: Delete */}
-                {can('delete-lands') && (
+                {can('delete-projects') && (
                     <Tooltip title="Delete">
                         <IconButton color="error" onClick={() => { setIdToDelete(row.original.id); setDeleteDialogOpen(true); }}>
                             <Delete />
@@ -189,28 +181,28 @@ const LandList: React.FC = () => {
             </Box>
         ),
         renderTopToolbarCustomActions: () => (
-            <Button startIcon={<Refresh />} onClick={fetchLands} size="small">Refresh</Button>
+            <Button startIcon={<Refresh />} onClick={fetchProjects} size="small">Refresh</Button>
         ),
-        muiTablePaperProps: { elevation: 2, sx: { borderRadius: '8px' } }
+        muiTablePaperProps: { elevation: 2, sx: { borderRadius: '8px' } },
+        enableColumnFilters: false, // Matches your request to disable inline filters
     });
 
     return (
         <IonPage>
             <IonContent fullscreen>
-                <PageHeader title="Land Bank" />
+                <PageHeader title="Projects" />
                 <Box sx={{ p: 3, bgcolor: '#f5f5f5', minHeight: 'calc(100vh - 64px)' }}>
                     <Container maxWidth="xl">
 
                         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
-                            {/* CHECK PERMISSION: Create */}
-                            {can('create-lands') && (
-                                <Button variant="contained" startIcon={<Add />} onClick={() => history.push('/lands/create')}>
-                                    Add Land
+                            {can('create-projects') && (
+                                <Button variant="contained" startIcon={<Add />} onClick={() => history.push('/projects/create')}>
+                                    Add Project
                                 </Button>
                             )}
                         </Box>
 
-                        {!can('view-lands') ? (
+                        {!can('view-projects') ? (
                             <Alert severity="error">You do not have permission to view this data.</Alert>
                         ) : (
                             <>
@@ -219,13 +211,12 @@ const LandList: React.FC = () => {
                             </>
                         )}
 
-                        {/* Delete Dialog */}
                         <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
                             <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <Warning color="warning" /> Confirm Delete
                             </DialogTitle>
                             <DialogContent>
-                                <DialogContentText>Are you sure you want to delete this land record?</DialogContentText>
+                                <DialogContentText>Are you sure you want to delete this project?</DialogContentText>
                             </DialogContent>
                             <DialogActions sx={{ p: 2 }}>
                                 <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
@@ -242,4 +233,4 @@ const LandList: React.FC = () => {
     );
 };
 
-export default LandList;
+export default ProjectList;

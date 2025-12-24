@@ -7,6 +7,7 @@ export interface Land {
     status: LandStatus;
     lot: string;
     sheet?: string;
+    size?: string;
     section?: string;
     town: string;
     district?: string;

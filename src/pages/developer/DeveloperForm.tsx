@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { IonContent, IonPage } from '@ionic/react';
 import { useHistory, useParams } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
@@ -49,6 +49,17 @@ const DeveloperForm: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
 
+    // Create a ref for the IonContent
+    const contentRef = useRef<HTMLIonContentElement>(null);
+
+    // Scroll to top whenever an error appears
+    useEffect(() => {
+        if (submitError) {
+            // Scroll to top over 500ms
+            contentRef.current?.scrollToTop(500);
+        }
+    }, [submitError]);
+
     // Load Data if Edit Mode
     useEffect(() => {
         if (isEditMode) {
@@ -89,7 +100,7 @@ const DeveloperForm: React.FC = () => {
 
     return (
         <IonPage>
-            <IonContent fullscreen>
+            <IonContent fullscreen ref={contentRef}>
 
                 {/* Header with Back Button enabled */}
                 <PageHeader
