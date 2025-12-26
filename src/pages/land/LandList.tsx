@@ -3,7 +3,7 @@ import { IonContent, IonPage, useIonViewWillEnter } from '@ionic/react';
 import { useHistory } from 'react-router-dom';
 import { LandService, Land, LandParams } from '../../services/land';
 import { LandStatus, LandStatusLabels, LandTenureTypeLabels, MalaysiaStateLabels, MalaysiaState, LandTenureType } from '../../enums';
-import { usePermission } from '../../hooks/usePermission'; // <--- Your new hook
+import { usePermission } from '../../hooks/usePermission';
 
 // UI Components
 import PageHeader from '../../components/common/PageHeader';
@@ -16,13 +16,13 @@ import {
 } from 'material-react-table';
 import {
     Container, Box, Typography, Button, Alert, IconButton, Chip, Tooltip,
-    Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle
+    Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, CircularProgress
 } from '@mui/material';
 import { Add, Edit, Delete, Refresh, Warning } from '@mui/icons-material';
 
 const LandList: React.FC = () => {
     const history = useHistory();
-    const { can } = usePermission(); // Initialize Permission Hook
+    const { can } = usePermission();
 
     // --- State ---
     const [data, setData] = useState<Land[]>([]);
@@ -35,14 +35,14 @@ const LandList: React.FC = () => {
     const [sorting, setSorting] = useState<MRT_SortingState>([{ id: 'lot', desc: false }]);
     const [pagination, setPagination] = useState<MRT_PaginationState>({ pageIndex: 0, pageSize: 10 });
 
-    // Delete Dialog
+    // Delete Dialog State
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-    const [idToDelete, setIdToDelete] = useState<string | null>(null);
+    const [landToDelete, setLandToDelete] = useState<Land | null>(null); // Track full object
     const [isDeleting, setIsDeleting] = useState(false);
 
     // --- Fetch Data ---
     const fetchLands = async () => {
-        if (!can('view-lands')) return; // Basic guard
+        if (!can('view-lands')) return;
 
         setLoading(true);
         setError(null);
@@ -69,16 +69,33 @@ const LandList: React.FC = () => {
     useIonViewWillEnter(() => { fetchLands(); });
 
     // --- Delete Logic ---
+
+    const handleDeleteClick = (land: Land) => {
+        setLandToDelete(land);
+        setDeleteDialogOpen(true);
+        setError(null); // Clear previous errors
+    };
+
     const confirmDelete = async () => {
-        if (!idToDelete) return;
+        if (!landToDelete) return;
         setIsDeleting(true);
+        setError(null);
+
         try {
-            await LandService.delete(idToDelete);
+            await LandService.delete(landToDelete.id);
             setDeleteDialogOpen(false);
-            setIdToDelete(null);
+            setLandToDelete(null);
             fetchLands();
-        } catch (err) {
-            alert("Failed to delete.");
+        } catch (err: any) {
+            console.error(err);
+            setDeleteDialogOpen(false); // Close dialog to show error on main screen
+
+            // Handle specific 422 Integrity Error (e.g., land assigned to projects)
+            if (err.response && err.response.status === 422) {
+                setError(err.response.data.message || "Cannot delete this land because it is currently assigned to a project.");
+            } else {
+                setError("An unexpected error occurred while deleting the land record.");
+            }
         } finally {
             setIsDeleting(false);
         }
@@ -91,6 +108,7 @@ const LandList: React.FC = () => {
                 accessorKey: 'lot',
                 header: 'Lot No.',
                 size: 120,
+                Cell: ({ cell }) => <strong>{cell.getValue<string>()}</strong>
             },
             {
                 accessorKey: 'state',
@@ -126,7 +144,6 @@ const LandList: React.FC = () => {
                         <Typography variant="body2">
                             {LandTenureTypeLabels[cell.getValue<LandTenureType>()]}
                         </Typography>
-                        {/* Show expiry if Leasehold */}
                         {cell.getValue<string>() === 'leasehold' && row.original.lease_expiry && (
                             <Typography variant="caption" color="textSecondary">
                                 Exp: {row.original.lease_expiry}
@@ -136,45 +153,21 @@ const LandList: React.FC = () => {
                 )
             },
             {
-                accessorKey: 'lease_duration',
-                header: 'Lease Duration',
-                size: 120,
-                Cell: ({ cell }) => (
-                    <Typography variant="body2">
-                        {cell.getValue<string>() || '-'}
-                    </Typography>
-                ),
-            },
-            {
-                accessorKey: 'lease_expiry',
-                header: 'Lease Expiry',
-                size: 120,
-                Cell: ({ cell }) => (
-                    <Typography variant="body2">
-                        {cell.getValue<string>() || '-'}
-                    </Typography>
-                ),
-            },
-            {
                 accessorKey: 'status',
                 header: 'Status',
                 size: 100,
                 Cell: ({ cell }) => {
                     const status = cell.getValue<LandStatus>();
-
-                    // Define color mapping for your specific statuses
                     const statusColors: Record<LandStatus, "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning"> = {
-                        [LandStatus.ACQUIRED]: 'info',      // Blue (In possession)
-                        [LandStatus.DEVELOPED]: 'success',  // Green (Completed)
-                        [LandStatus.DISPOSED]: 'default',   // Grey (No longer active)
+                        [LandStatus.ACQUIRED]: 'info',
+                        [LandStatus.DEVELOPED]: 'success',
+                        [LandStatus.DISPOSED]: 'default',
                     };
 
                     return (
                         <Chip
-                            // Use the label map, fallback to the raw code if missing
                             label={LandStatusLabels[status] || status}
                             size="small"
-                            // Look up the color, default to 'default' if undefined
                             color={statusColors[status] || 'default'}
                             variant="outlined"
                         />
@@ -200,8 +193,6 @@ const LandList: React.FC = () => {
         positionActionsColumn: 'last',
         renderRowActions: ({ row }) => (
             <Box sx={{ display: 'flex', gap: '0.5rem' }}>
-
-                {/* CHECK PERMISSION: Update */}
                 {can('update-lands') && (
                     <Tooltip title="Edit">
                         <IconButton color="primary" onClick={() => history.push(`/lands/edit/${row.original.id}`)}>
@@ -209,11 +200,9 @@ const LandList: React.FC = () => {
                         </IconButton>
                     </Tooltip>
                 )}
-
-                {/* CHECK PERMISSION: Delete */}
                 {can('delete-lands') && (
                     <Tooltip title="Delete">
-                        <IconButton color="error" onClick={() => { setIdToDelete(row.original.id); setDeleteDialogOpen(true); }}>
+                        <IconButton color="error" onClick={() => handleDeleteClick(row.original)}>
                             <Delete />
                         </IconButton>
                     </Tooltip>
@@ -224,9 +213,7 @@ const LandList: React.FC = () => {
             <Button startIcon={<Refresh />} onClick={fetchLands} size="small">Refresh</Button>
         ),
         muiTablePaperProps: { elevation: 2, sx: { borderRadius: '8px' } },
-
-        // --- DISABLE FILTERS ---
-        enableColumnFilters: false, // Hides inputs under column headers
+        enableColumnFilters: false,
     });
 
     return (
@@ -237,7 +224,6 @@ const LandList: React.FC = () => {
                     <Container maxWidth="xl">
 
                         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
-                            {/* CHECK PERMISSION: Create */}
                             {can('create-lands') && (
                                 <Button variant="contained" startIcon={<Add />} onClick={() => history.push('/lands/create')}>
                                     Add Land
@@ -249,22 +235,43 @@ const LandList: React.FC = () => {
                             <Alert severity="error">You do not have permission to view this data.</Alert>
                         ) : (
                             <>
-                                {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+                                {/* Display Errors Here */}
+                                {error && (
+                                    <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
+                                        {error}
+                                    </Alert>
+                                )}
                                 <MaterialReactTable table={table} />
                             </>
                         )}
 
-                        {/* Delete Dialog */}
-                        <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+                        {/* --- Delete Confirmation Dialog --- */}
+                        <Dialog open={deleteDialogOpen} onClose={() => !isDeleting && setDeleteDialogOpen(false)}>
                             <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Warning color="warning" /> Confirm Delete
+                                <Warning color="error" /> Confirm Deletion
                             </DialogTitle>
                             <DialogContent>
-                                <DialogContentText>Are you sure you want to delete this land record?</DialogContentText>
+                                <DialogContentText>
+                                    Are you sure you want to delete the land Lot No. <strong>{landToDelete?.lot}</strong>?
+                                    <br /><br />
+                                    This action will remove the land record from the system.
+                                    <br />
+                                    <Typography variant="caption" color="text.secondary">
+                                        (Note: Deletion will be blocked if this land is currently assigned to any projects.)
+                                    </Typography>
+                                </DialogContentText>
                             </DialogContent>
-                            <DialogActions sx={{ p: 2 }}>
-                                <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-                                <Button onClick={confirmDelete} color="error" variant="contained" disabled={isDeleting}>
+                            <DialogActions>
+                                <Button onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>
+                                    Cancel
+                                </Button>
+                                <Button 
+                                    onClick={confirmDelete} 
+                                    color="error" 
+                                    variant="contained" 
+                                    disabled={isDeleting}
+                                    startIcon={isDeleting ? <CircularProgress size={20} color="inherit" /> : <Delete />}
+                                >
                                     {isDeleting ? 'Deleting...' : 'Delete'}
                                 </Button>
                             </DialogActions>

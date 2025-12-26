@@ -1,7 +1,13 @@
 import axios from 'axios';
 import { Preferences } from '@capacitor/preferences';
 
-export const API_URL = 'http://localhost:8199/api';
+// 1. Read variables using import.meta.env
+const protocol = import.meta.env.VITE_API_SERVER_PROTOCOL || 'http';
+const serverName = import.meta.env.VITE_API_SERVER_NAME || 'localhost:8199';
+const prefix = import.meta.env.VITE_API_PREFIX || 'api';
+
+// 2. Construct the full URL
+export const API_URL = `${protocol}://${serverName}/${prefix}`;
 
 const api = axios.create({
     // Replace with your Laravel URL.

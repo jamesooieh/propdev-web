@@ -1,45 +1,45 @@
 import api from './api';
 import { CategoryStatus } from '../enums';
-import { Group } from './group';
+// import { Group } from './group'; // Import if you need Group interface later
 
 export interface Category {
     id: string;
     project_id: string;
-    title: string;          // Matched to DB
-    status: CategoryStatus; // Matched to Enum
-    
-    // Audit & Timestamps
-    created_by?: string;
-    approved_by?: string;
+    title: string;
+    status: CategoryStatus;
+    groups_count?: number; // Useful for UI stats if your backend provides it
     created_at?: string;
-    updated_at?: string;
-    archived_at?: string | null;
-
+    
     // Relationships
-    groups?: Group[]; 
+    groups?: any[]; 
 }
 
-export interface CategoryParams {
-    project_id: string; // Required to fetch categories for a project
-    get_all?: number;   // Optional flag if you want un-paginated lists
-}
-
-const BASE_URL = '/project/categories'; // Adjust based on your actual route file prefix
+// Helper to build the nested URL
+const buildUrl = (projectId: string) => `/project/projects/${projectId}/categories`;
 
 export const CategoryService = {
-    getAll: async (params: CategoryParams) => {
-        const { data } = await api.get(BASE_URL, { params });
-        return data; // Returns { data: Category[] }
+    getAll: async (params: { project_id: string, search?: string }) => {
+        const { project_id, ...rest } = params;
+        const { data } = await api.get(buildUrl(project_id), { params: rest });
+        return data; // Expecting { data: Category[], meta: ... }
     },
-    create: async (payload: Partial<Category>) => {
-        const { data } = await api.post(BASE_URL, payload);
+
+    getById: async (projectId: string, categoryId: string) => {
+        const { data } = await api.get(`${buildUrl(projectId)}/${categoryId}`);
         return data;
     },
-    update: async (id: string, payload: Partial<Category>) => {
-        const { data } = await api.put(`${BASE_URL}/${id}`, payload);
+
+    create: async (payload: { project_id: string, title: string, status: string }) => {
+        const { data } = await api.post(buildUrl(payload.project_id), payload);
         return data;
     },
-    delete: async (id: string) => {
-        await api.delete(`${BASE_URL}/${id}`);
+
+    update: async (projectId: string, categoryId: string, payload: any) => {
+        const { data } = await api.put(`${buildUrl(projectId)}/${categoryId}`, payload);
+        return data;
+    },
+
+    delete: async (projectId: string, categoryId: string) => {
+        await api.delete(`${buildUrl(projectId)}/${categoryId}`);
     }
 };

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useHistory } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { isSystemRoot } from '../../services/auth'; // Ensure this path is correct based on previous context
+import { isSystemRoot } from '../../services/auth';
 import { usePermission } from '../../hooks/usePermission';
 
 import { 
@@ -16,36 +16,31 @@ import {
 interface PageHeaderProps {
     title: string;
     showBackButton?: boolean;
+    onBack?: () => void; // <--- 1. Add optional prop definition
 }
 
-const PageHeader: React.FC<PageHeaderProps> = ({ title, showBackButton = false }) => {
+const PageHeader: React.FC<PageHeaderProps> = ({ title, showBackButton = false, onBack }) => { // <--- 2. Destructure it here
     const { user, logout } = useAuth();
     const history = useHistory();
     const { can } = usePermission();
 
-    // --- Menu State Management ---
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const open = Boolean(anchorEl);
 
-    // Open Menu
     const handleMenuClick = (event: React.MouseEvent<HTMLButtonElement>) => {
         setAnchorEl(event.currentTarget);
     };
 
-    // Close Menu
     const handleMenuClose = () => {
         setAnchorEl(null);
     };
 
-    // Handle Navigation
     const handleNavigate = (path: string) => {
         history.push(path);
         handleMenuClose();
     };
 
-    // Handle Logout
     const handleLogout = async () => {
-        // Close menu if it's open (though logout usually redirects anyway)
         handleMenuClose(); 
         await logout();
         history.replace('/login');
@@ -58,7 +53,8 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, showBackButton = false }
                     <IconButton 
                         edge="start" 
                         color="inherit" 
-                        onClick={() => history.goBack()} 
+                        // 3. Use onBack if provided, otherwise default to history.goBack()
+                        onClick={onBack ? onBack : () => history.goBack()} 
                         sx={{ mr: 2 }}
                     >
                         <ArrowBackIcon />
@@ -69,39 +65,33 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, showBackButton = false }
                             edge="start" 
                             color="inherit" 
                             aria-label="menu" 
-                            onClick={handleMenuClick} // Trigger the menu
+                            onClick={handleMenuClick}
                             sx={{ mr: 2 }}
                         >
                             <MenuIcon />
                         </IconButton>
 
-                        {/* Dropdown Menu Component */}
                         <Menu
                             id="basic-menu"
                             anchorEl={anchorEl}
                             open={open}
                             onClose={handleMenuClose}
-                            MenuListProps={{
-                                'aria-labelledby': 'basic-button',
-                            }}
+                            MenuListProps={{ 'aria-labelledby': 'basic-button' }}
                         >
                             <MenuItem onClick={() => handleNavigate('/home')}>Home</MenuItem>
                             
-                            {/* Root Only: Developers */}
                             {isSystemRoot(user) && (
                                 <MenuItem onClick={() => handleNavigate('/developers')}>
                                     Developers
                                 </MenuItem>
                             )}
 
-                            {/* Permission Check: Lands */}
                             {can('view-lands') && (
                                 <MenuItem onClick={() => handleNavigate('/lands')}>
                                     Land Bank
                                 </MenuItem>
                             )}
 
-                            {/* Permission Check: Lands */}
                             {can('view-projects') && (
                                 <MenuItem onClick={() => handleNavigate('/projects')}>
                                     Projects

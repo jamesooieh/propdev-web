@@ -1,8 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { IonContent, IonPage, useIonViewWillEnter } from '@ionic/react';
 import { useHistory } from 'react-router-dom';
-import { ProjectService, ProjectParams, Project } from '../../services/project'; // Ensure this service exists
-import { ProjectStatus, ProjectStatusLabels } from '../../enums'; // Ensure Enums exist
+import { ProjectService, ProjectParams, Project } from '../../services/project';
+import { ProjectStatus, ProjectStatusLabels } from '../../enums';
 import { usePermission } from '../../hooks/usePermission';
 
 // UI Components
@@ -16,7 +16,7 @@ import {
 } from 'material-react-table';
 import {
     Container, Box, Typography, Button, Alert, IconButton, Chip, Tooltip,
-    Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle
+    Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, CircularProgress
 } from '@mui/material';
 import { Add, Edit, Delete, Refresh, Visibility, Warning } from '@mui/icons-material';
 
@@ -37,7 +37,7 @@ const ProjectList: React.FC = () => {
 
     // Delete Dialog State
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-    const [idToDelete, setIdToDelete] = useState<string | null>(null);
+    const [projectToDelete, setProjectToDelete] = useState<Project | null>(null); // Store full object for better UI
     const [isDeleting, setIsDeleting] = useState(false);
 
     // --- Fetch Data ---
@@ -69,16 +69,33 @@ const ProjectList: React.FC = () => {
     useIonViewWillEnter(() => { fetchProjects(); });
 
     // --- Delete Logic ---
+
+    const handleDeleteClick = (project: Project) => {
+        setProjectToDelete(project);
+        setDeleteDialogOpen(true);
+        setError(null); // Clear previous errors
+    };
+
     const confirmDelete = async () => {
-        if (!idToDelete) return;
+        if (!projectToDelete) return;
         setIsDeleting(true);
+        setError(null);
+
         try {
-            await ProjectService.delete(idToDelete);
+            await ProjectService.delete(projectToDelete.id);
             setDeleteDialogOpen(false);
-            setIdToDelete(null);
+            setProjectToDelete(null);
             fetchProjects();
-        } catch (err) {
-            alert("Failed to delete project.");
+        } catch (err: any) {
+            console.error(err);
+            setDeleteDialogOpen(false); // Close dialog to show error on main screen
+
+            // Handle specific 422 Integrity Error (e.g., has active categories)
+            if (err.response && err.response.status === 422) {
+                setError(err.response.data.message || "Cannot delete this project because it is in use.");
+            } else {
+                setError("An unexpected error occurred while deleting the project.");
+            }
         } finally {
             setIsDeleting(false);
         }
@@ -119,15 +136,12 @@ const ProjectList: React.FC = () => {
                 size: 120,
                 Cell: ({ cell }) => {
                     const status = cell.getValue<ProjectStatus>();
-
-                    // Adjust colors based on your Enum logic
                     const statusColors: Record<string, "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning"> = {
                         'active': 'success',
                         'completed': 'info',
                         'pending': 'warning',
                         'archived': 'default'
                     };
-
                     return (
                         <Chip
                             label={ProjectStatusLabels[status] || status}
@@ -147,7 +161,7 @@ const ProjectList: React.FC = () => {
         data,
         manualPagination: true,
         manualSorting: true,
-        manualFiltering: true, // Backend handles search
+        manualFiltering: true,
         rowCount: totalRows,
         state: { isLoading: loading, showProgressBars: loading, pagination, sorting, globalFilter },
         onPaginationChange: setPagination,
@@ -173,7 +187,7 @@ const ProjectList: React.FC = () => {
                 )}
                 {can('delete-projects') && (
                     <Tooltip title="Delete">
-                        <IconButton color="error" onClick={() => { setIdToDelete(row.original.id); setDeleteDialogOpen(true); }}>
+                        <IconButton color="error" onClick={() => handleDeleteClick(row.original)}>
                             <Delete />
                         </IconButton>
                     </Tooltip>
@@ -184,7 +198,7 @@ const ProjectList: React.FC = () => {
             <Button startIcon={<Refresh />} onClick={fetchProjects} size="small">Refresh</Button>
         ),
         muiTablePaperProps: { elevation: 2, sx: { borderRadius: '8px' } },
-        enableColumnFilters: false, // Matches your request to disable inline filters
+        enableColumnFilters: false,
     });
 
     return (
@@ -206,21 +220,43 @@ const ProjectList: React.FC = () => {
                             <Alert severity="error">You do not have permission to view this data.</Alert>
                         ) : (
                             <>
-                                {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+                                {/* Display Errors Here */}
+                                {error && (
+                                    <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
+                                        {error}
+                                    </Alert>
+                                )}
                                 <MaterialReactTable table={table} />
                             </>
                         )}
 
-                        <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+                        {/* --- Delete Confirmation Dialog --- */}
+                        <Dialog open={deleteDialogOpen} onClose={() => !isDeleting && setDeleteDialogOpen(false)}>
                             <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Warning color="warning" /> Confirm Delete
+                                <Warning color="error" /> Confirm Deletion
                             </DialogTitle>
                             <DialogContent>
-                                <DialogContentText>Are you sure you want to delete this project?</DialogContentText>
+                                <DialogContentText>
+                                    Are you sure you want to delete the project <strong>{projectToDelete?.title}</strong>?
+                                    <br /><br />
+                                    This action will remove the project and its settings.
+                                    <br />
+                                    <Typography variant="caption" color="text.secondary">
+                                        (Note: Deletion will be blocked if this project still contains active categories or lands.)
+                                    </Typography>
+                                </DialogContentText>
                             </DialogContent>
-                            <DialogActions sx={{ p: 2 }}>
-                                <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-                                <Button onClick={confirmDelete} color="error" variant="contained" disabled={isDeleting}>
+                            <DialogActions>
+                                <Button onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>
+                                    Cancel
+                                </Button>
+                                <Button 
+                                    onClick={confirmDelete} 
+                                    color="error" 
+                                    variant="contained" 
+                                    disabled={isDeleting}
+                                    startIcon={isDeleting ? <CircularProgress size={20} color="inherit" /> : <Delete />}
+                                >
                                     {isDeleting ? 'Deleting...' : 'Delete'}
                                 </Button>
                             </DialogActions>

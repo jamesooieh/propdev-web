@@ -7,6 +7,7 @@ import { DeveloperService, Developer, DeveloperParams } from '../../services/dev
 import {
     DeveloperStatus, DeveloperStatusLabels, getCountryLabel
 } from '../../enums';
+import { usePermission } from '../../hooks/usePermission'; // <--- Permission Hook
 import PageHeader from '../../components/common/PageHeader';
 
 // MRT Imports
@@ -27,48 +28,47 @@ import { Add, Edit, Delete, Refresh, Warning } from '@mui/icons-material';
 
 const DeveloperList: React.FC = () => {
     const history = useHistory();
+    const { can } = usePermission(); // Initialize Permission Hook
 
     // --- SERVER-SIDE STATE MANAGEMENT ---
     const [data, setData] = useState<Developer[]>([]);
-    const [totalRows, setTotalRows] = useState(0); // For Pagination
+    const [totalRows, setTotalRows] = useState(0); 
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     // MRT States
-    const [globalFilter, setGlobalFilter] = useState(''); // Search
+    const [globalFilter, setGlobalFilter] = useState(''); 
     const [sorting, setSorting] = useState<MRT_SortingState>([
-        { id: 'name', desc: false } // 'id' must match the accessorKey in your columns
+        { id: 'name', desc: false } 
     ]);
     const [pagination, setPagination] = useState<MRT_PaginationState>({
-        pageIndex: 0, // MRT uses 0-based index
+        pageIndex: 0, 
         pageSize: 10,
     });
 
-    // Dialog States
+    // Delete Dialog States
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-    const [developerToDelete, setDeveloperToDelete] = useState<string | null>(null);
+    const [developerToDelete, setDeveloperToDelete] = useState<Developer | null>(null); // Track full object
     const [isDeleting, setIsDeleting] = useState(false);
 
     // 1. Fetch Data Function
     const fetchDevelopers = async () => {
+        // Basic permission guard for fetching
+        if (!can('view-developers')) return;
+
         setLoading(true);
         setError(null);
         try {
-            // Prepare Query Params for Laravel
-            const queryParams: DeveloperParams = { // <--- Explicitly type this object
+            const queryParams: DeveloperParams = { 
                 page: pagination.pageIndex + 1,
                 per_page: pagination.pageSize,
                 search: globalFilter || undefined,
                 sort: sorting.length > 0 ? sorting[0].id : 'created_at',
-                // Fix: Cast the result to the specific type
                 direction: (sorting.length > 0 ? (sorting[0].desc ? 'desc' : 'asc') : 'desc') as 'asc' | 'desc',
             };
 
             const res = await DeveloperService.getAll(queryParams);
-
-            // Handle Laravel Resource Collection Structure
-            // Usually: { data: [...], meta: { total: 100, ... } }
             setData(res.data);
             setTotalRows(res.meta?.total || res.total || 0);
 
@@ -84,34 +84,43 @@ const DeveloperList: React.FC = () => {
         }
     };
 
-    // 2. React to State Changes
-    // Whenever pagination, sorting, or search changes, refetch data.
     useEffect(() => {
         fetchDevelopers();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pagination.pageIndex, pagination.pageSize, sorting, globalFilter]);
 
-    // Initial Load handled by useEffect, but we keep this for navigation return
     useIonViewWillEnter(() => {
         fetchDevelopers();
     });
 
-    // ... (handleDelete logic remains the same) ...
-    const clickDeleteIcon = (id: string) => {
-        setDeveloperToDelete(id);
+    // --- Delete Logic ---
+
+    const handleDeleteClick = (developer: Developer) => {
+        setDeveloperToDelete(developer);
         setDeleteDialogOpen(true);
+        setError(null); // Clear previous errors
     };
 
-    const handleConfirmDelete = async () => {
+    const confirmDelete = async () => {
         if (!developerToDelete) return;
         setIsDeleting(true);
+        setError(null);
+
         try {
-            await DeveloperService.delete(developerToDelete);
+            await DeveloperService.delete(developerToDelete.id);
             setDeleteDialogOpen(false);
             setDeveloperToDelete(null);
             fetchDevelopers();
-        } catch (err) {
-            alert("Failed to delete.");
+        } catch (err: any) {
+            console.error(err);
+            setDeleteDialogOpen(false); // Close dialog
+
+            // Handle specific 422 Integrity Error (e.g., active projects)
+            if (err.response && err.response.status === 422) {
+                setError(err.response.data.message || "Cannot delete this developer because they have active projects.");
+            } else {
+                setError("An unexpected error occurred while deleting the developer.");
+            }
         } finally {
             setIsDeleting(false);
         }
@@ -122,14 +131,13 @@ const DeveloperList: React.FC = () => {
         () => [
             {
                 accessorKey: 'name',
-                header: 'Developer', // Changed from 'Company Name'
+                header: 'Developer', 
                 size: 250,
                 Cell: ({ row }) => (
                     <Box>
                         <Typography variant="body2" fontWeight="bold">
                             {row.original.name}
                         </Typography>
-                        {/* Kept the city/country subtitle as it's useful context */}
                         <Typography variant="caption" color="textSecondary">
                             {row.original.city}, {row.original.country ? getCountryLabel(row.original.country) : ''}
                         </Typography>
@@ -147,12 +155,12 @@ const DeveloperList: React.FC = () => {
                 size: 120,
             },
             {
-                accessorKey: 'email', // New Column
+                accessorKey: 'email', 
                 header: 'Email',
                 size: 150,
             },
             {
-                accessorKey: 'phone_mobile', // New Column
+                accessorKey: 'phone_mobile', 
                 header: 'Contact No',
                 size: 130,
             },
@@ -176,18 +184,14 @@ const DeveloperList: React.FC = () => {
         [],
     );
 
-    // 4. Configure Table for Server-Side Mode
+    // 4. Configure Table
     const table = useMaterialReactTable({
         columns,
-        data, // Use the fetched data
-
-        // Server-Side Flags
+        data,
         manualPagination: true,
         manualSorting: true,
-        manualFiltering: true, // If using global filter
-
-        // State Mapping
-        rowCount: totalRows, // Tell MRT how many rows exist in total (from backend)
+        manualFiltering: true, 
+        rowCount: totalRows, 
         state: {
             isLoading: loading,
             showProgressBars: loading,
@@ -195,26 +199,30 @@ const DeveloperList: React.FC = () => {
             sorting,
             globalFilter,
         },
-
-        // State Updaters
         onPaginationChange: setPagination,
         onSortingChange: setSorting,
         onGlobalFilterChange: setGlobalFilter,
-
         enableRowActions: true,
         positionActionsColumn: 'last',
         renderRowActions: ({ row }) => (
             <Box sx={{ display: 'flex', gap: '0.5rem' }}>
-                <Tooltip title="Edit">
-                    <IconButton color="primary" onClick={() => history.push(`/developers/edit/${row.original.id}`)}>
-                        <Edit />
-                    </IconButton>
-                </Tooltip>
-                <Tooltip title="Delete">
-                    <IconButton color="error" onClick={() => clickDeleteIcon(row.original.id)}>
-                        <Delete />
-                    </IconButton>
-                </Tooltip>
+                {/* CHECK PERMISSION: Update */}
+                {can('update-developers') && (
+                    <Tooltip title="Edit">
+                        <IconButton color="primary" onClick={() => history.push(`/developers/edit/${row.original.id}`)}>
+                            <Edit />
+                        </IconButton>
+                    </Tooltip>
+                )}
+                
+                {/* CHECK PERMISSION: Delete */}
+                {can('delete-developers') && (
+                    <Tooltip title="Delete">
+                        <IconButton color="error" onClick={() => handleDeleteClick(row.original)}>
+                            <Delete />
+                        </IconButton>
+                    </Tooltip>
+                )}
             </Box>
         ),
         renderTopToolbarCustomActions: () => (
@@ -223,41 +231,70 @@ const DeveloperList: React.FC = () => {
             </Button>
         ),
         muiTablePaperProps: { elevation: 2, sx: { borderRadius: '8px' } },
-
-        // --- DISABLE FILTERS ---
-        enableColumnFilters: false, // Hides inputs under column headers
+        enableColumnFilters: false, 
     });
 
     return (
         <IonPage>
             <IonContent fullscreen>
-                {/* Header */}
                 <PageHeader title="Developer Management" />
 
                 <Box sx={{ p: 3, bgcolor: '#f5f5f5', minHeight: 'calc(100vh - 64px)' }}>
                     <Container maxWidth="xl">
+                        
+                        {/* Header Actions */}
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                             <Typography variant="h5" fontWeight="bold">Developer Management</Typography>
-                            <Button variant="contained" startIcon={<Add />} onClick={() => history.push('/developers/create')}>
-                                New Developer
-                            </Button>
+                            
+                            {/* CHECK PERMISSION: Create */}
+                            {can('create-developers') && (
+                                <Button variant="contained" startIcon={<Add />} onClick={() => history.push('/developers/create')}>
+                                    New Developer
+                                </Button>
+                            )}
                         </Box>
 
-                        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+                        {/* Permission Error or Table */}
+                        {!can('view-developers') ? (
+                             <Alert severity="error">You do not have permission to view this data.</Alert>
+                        ) : (
+                            <>
+                                {error && (
+                                    <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
+                                        {error}
+                                    </Alert>
+                                )}
+                                <MaterialReactTable table={table} />
+                            </>
+                        )}
 
-                        <MaterialReactTable table={table} />
-
-                        {/* Dialog Component (Same as before) */}
-                        <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+                        {/* --- Delete Confirmation Dialog --- */}
+                        <Dialog open={deleteDialogOpen} onClose={() => !isDeleting && setDeleteDialogOpen(false)}>
                             <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Warning color="warning" /> Confirm Delete
+                                <Warning color="error" /> Confirm Deletion
                             </DialogTitle>
                             <DialogContent>
-                                <DialogContentText>Are you sure? This cannot be undone.</DialogContentText>
+                                <DialogContentText>
+                                    Are you sure you want to delete the developer <strong>{developerToDelete?.name}</strong>?
+                                    <br /><br />
+                                    This action will remove the developer account and credentials.
+                                    <br />
+                                    <Typography variant="caption" color="text.secondary">
+                                        (Note: Deletion will be blocked if this developer owns any active projects or land.)
+                                    </Typography>
+                                </DialogContentText>
                             </DialogContent>
-                            <DialogActions sx={{ p: 2 }}>
-                                <Button onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>Cancel</Button>
-                                <Button onClick={handleConfirmDelete} color="error" variant="contained" disabled={isDeleting}>
+                            <DialogActions>
+                                <Button onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>
+                                    Cancel
+                                </Button>
+                                <Button 
+                                    onClick={confirmDelete} 
+                                    color="error" 
+                                    variant="contained" 
+                                    disabled={isDeleting}
+                                    startIcon={isDeleting ? <CircularProgress size={20} color="inherit" /> : <Delete />}
+                                >
                                     {isDeleting ? 'Deleting...' : 'Delete'}
                                 </Button>
                             </DialogActions>
