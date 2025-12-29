@@ -25,11 +25,12 @@ export interface Land {
 }
 
 export interface LandParams {
-    page: number;
-    per_page: number;
+    page?: number;
+    per_page?: number;
     search?: string;
-    sort: string;
-    direction: 'asc' | 'desc';
+    sort?: string;
+    direction?: 'asc' | 'desc';
+    get_all?: 1 | 0 | boolean;
 }
 
 // Full path based on your route prefixes: /api/developer/developers

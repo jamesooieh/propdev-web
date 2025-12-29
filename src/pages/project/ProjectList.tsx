@@ -18,7 +18,7 @@ import {
     Container, Box, Typography, Button, Alert, IconButton, Chip, Tooltip,
     Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, CircularProgress
 } from '@mui/material';
-import { Add, Edit, Delete, Refresh, Visibility, Warning } from '@mui/icons-material';
+import { Add, Edit, Delete, FolderOpen, Refresh, Warning } from '@mui/icons-material';
 
 const ProjectList: React.FC = () => {
     const history = useHistory();
@@ -174,7 +174,7 @@ const ProjectList: React.FC = () => {
                 {can('view-projects') && (
                     <Tooltip title="View Dashboard">
                         <IconButton color="info" onClick={() => history.push(`/projects/dashboard/${row.original.id}`)}>
-                            <Visibility />
+                            <FolderOpen />
                         </IconButton>
                     </Tooltip>
                 )}

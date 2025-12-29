@@ -23,14 +23,13 @@ export interface Project {
 }
 
 export interface ProjectParams {
-    page: number;
-    per_page: number;
+    page?: number;
+    per_page?: number;
     search?: string;
-    sort: string;
-    direction: 'asc' | 'desc';
-    
-    // Optional filters supported by your Controller
+    sort?: string;
+    direction?: 'asc' | 'desc';
     status?: string;
+    get_all?: 1 | 0 | boolean;
     developer_id?: string;
 }
 

@@ -1,17 +1,17 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { 
-    MaterialReactTable, 
-    useMaterialReactTable, 
+import {
+    MaterialReactTable,
+    useMaterialReactTable,
     type MRT_ColumnDef,
     type MRT_SortingState,
-    type MRT_PaginationState 
+    type MRT_PaginationState
 } from 'material-react-table';
-import { 
-    Box, IconButton, Tooltip, Chip, Button, Dialog, DialogTitle, 
-    DialogContent, DialogContentText, DialogActions, TextField, 
+import {
+    Box, IconButton, Tooltip, Chip, Button, Dialog, DialogTitle,
+    DialogContent, DialogContentText, DialogActions, TextField,
     Typography, Alert, CircularProgress
 } from '@mui/material';
-import { Edit, Delete, FolderOpen, Refresh, Warning } from '@mui/icons-material';
+import { Edit, Delete, FolderOpen, Refresh, Add, Warning } from '@mui/icons-material';
 
 // Services & Enums
 import { CategoryService, Category } from '../../../../services/category';
@@ -19,13 +19,14 @@ import { CategoryStatus, CategoryStatusLabels } from '../../../../enums';
 
 interface CategoryListWorkspaceProps {
     projectId: string;
-    mode: 'VIEW' | 'MANAGE';
+    onCategoryChange: () => void;
+    onSelectCategory: (category: Category) => void;
 }
 
-const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId, mode }) => {
+const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId, onCategoryChange, onSelectCategory }) => {
     // --- Server-Side Data State ---
     const [data, setData] = useState<Category[]>([]);
-    const [totalRows, setTotalRows] = useState(0); 
+    const [totalRows, setTotalRows] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -34,17 +35,22 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
     const [sorting, setSorting] = useState<MRT_SortingState>([{ id: 'title', desc: false }]);
     const [pagination, setPagination] = useState<MRT_PaginationState>({ pageIndex: 0, pageSize: 10 });
 
+    // --- Create Dialog State ---
+    const [createDialogOpen, setCreateDialogOpen] = useState(false);
+    const [newCategoryTitle, setNewCategoryTitle] = useState('');
+    const [isCreating, setIsCreating] = useState(false);
+
     // --- Edit Dialog State ---
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [editingCategory, setEditingCategory] = useState<Category | null>(null);
     const [editTitle, setEditTitle] = useState('');
 
-    // --- Delete Dialog State (NEW) ---
+    // --- Delete Dialog State ---
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    // --- Fetch Data (Server Side) ---
+    // --- Fetch Data ---
     const fetchCategories = async () => {
         setLoading(true);
         setError(null);
@@ -72,39 +78,26 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
 
     useEffect(() => { fetchCategories(); }, [projectId, pagination.pageIndex, pagination.pageSize, sorting, globalFilter]);
 
-    // --- Delete Logic (Updated) ---
-
-    // 1. Open the Dialog
-    const handleDeleteClick = (category: Category) => {
-        setCategoryToDelete(category);
-        setDeleteDialogOpen(true);
-        setError(null); // Clear previous errors
-    };
-
-    // 2. Perform Deletion
-    const confirmDelete = async () => {
-        if (!categoryToDelete) return;
-        
-        setIsDeleting(true);
-        setError(null); // Clear errors before attempting
-
+    // --- Create Logic ---
+    const handleCreate = async () => {
+        if (!newCategoryTitle.trim()) return;
+        setIsCreating(true);
         try {
-            await CategoryService.delete(projectId, categoryToDelete.id);
-            setDeleteDialogOpen(false);
-            setCategoryToDelete(null);
-            fetchCategories(); // Refresh list on success
-        } catch (err: any) {
-            console.error(err);
-            setDeleteDialogOpen(false); // Close dialog to show error on main screen
+            await CategoryService.create({
+                project_id: projectId,
+                title: newCategoryTitle,
+                status: CategoryStatus.ACTIVE
+            });
+            setCreateDialogOpen(false);
+            setNewCategoryTitle('');
 
-            // Handle specific 422 Integrity Error (e.g., has active groups)
-            if (err.response && err.response.status === 422) {
-                setError(err.response.data.message || "Cannot delete this category because it is in use.");
-            } else {
-                setError("An unexpected error occurred while deleting the category.");
-            }
+            // Refresh local list AND sidebar
+            fetchCategories();
+            onCategoryChange();
+        } catch (e) {
+            alert("Failed to create category");
         } finally {
-            setIsDeleting(false);
+            setIsCreating(false);
         }
     };
 
@@ -125,9 +118,47 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
                 status: editingCategory.status
             });
             setEditDialogOpen(false);
+
+            // Refresh local list AND sidebar (in case title changed)
             fetchCategories();
+            onCategoryChange();
         } catch (e) {
             setError("Failed to update category.");
+        }
+    };
+
+    // --- Delete Logic ---
+    const handleDeleteClick = (category: Category) => {
+        setCategoryToDelete(category);
+        setDeleteDialogOpen(true);
+        setError(null);
+    };
+
+    const confirmDelete = async () => {
+        if (!categoryToDelete) return;
+
+        setIsDeleting(true);
+        setError(null);
+
+        try {
+            await CategoryService.delete(projectId, categoryToDelete.id);
+            setDeleteDialogOpen(false);
+            setCategoryToDelete(null);
+
+            // Refresh local list AND sidebar
+            fetchCategories();
+            onCategoryChange();
+        } catch (err: any) {
+            console.error(err);
+            setDeleteDialogOpen(false);
+
+            if (err.response && err.response.status === 422) {
+                setError(err.response.data.message || "Cannot delete this category because it is in use.");
+            } else {
+                setError("An unexpected error occurred while deleting the category.");
+            }
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -145,10 +176,10 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
                 header: 'Status',
                 size: 100,
                 Cell: ({ cell }) => (
-                    <Chip 
-                        label={CategoryStatusLabels[cell.getValue<CategoryStatus>()]} 
-                        color={cell.getValue<string>() === 'A' ? 'success' : 'default'} 
-                        size="small" 
+                    <Chip
+                        label={CategoryStatusLabels[cell.getValue<CategoryStatus>()]}
+                        color={cell.getValue<string>() === 'A' ? 'success' : 'default'}
+                        size="small"
                         variant="outlined"
                     />
                 )
@@ -182,33 +213,29 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
         enableColumnFilters: false,
         enableDensityToggle: false,
         initialState: { density: 'compact' },
-        
+
         renderRowActions: ({ row }) => (
             <Box sx={{ display: 'flex', gap: '0.5rem' }}>
                 <Tooltip title="View Groups">
-                    <IconButton color="info" onClick={() => alert(`Maps to Groups for: ${row.original.title}`)}>
+                    <IconButton color="info" onClick={() => onSelectCategory(row.original)}>
                         <FolderOpen />
                     </IconButton>
                 </Tooltip>
 
-                {mode === 'MANAGE' && (
-                    <>
-                        <Tooltip title="Edit">
-                            <IconButton color="primary" onClick={() => openEditDialog(row.original)}>
-                                <Edit />
-                            </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Delete">
-                            {/* Updated to use handleDeleteClick */}
-                            <IconButton color="error" onClick={() => handleDeleteClick(row.original)}>
-                                <Delete />
-                            </IconButton>
-                        </Tooltip>
-                    </>
-                )}
+                <Tooltip title="Edit">
+                    <IconButton color="primary" onClick={() => openEditDialog(row.original)}>
+                        <Edit />
+                    </IconButton>
+                </Tooltip>
+
+                <Tooltip title="Delete">
+                    <IconButton color="error" onClick={() => handleDeleteClick(row.original)}>
+                        <Delete />
+                    </IconButton>
+                </Tooltip>
             </Box>
         ),
-        
+
         renderTopToolbarCustomActions: () => (
             <Button startIcon={<Refresh />} onClick={fetchCategories} size="small">
                 Refresh
@@ -218,20 +245,44 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
 
     return (
         <Box>
+            {/* Header Area */}
             <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="h5">
-                    {mode === 'MANAGE' ? 'Manage Categories' : 'Category List'}
-                </Typography>
+                <Typography variant="h5">Manage Categories</Typography>
+
+                <Button
+                    variant="contained"
+                    startIcon={<Add />}
+                    onClick={() => setCreateDialogOpen(true)}
+                >
+                    Add Category
+                </Button>
             </Box>
-            
+
             {/* Display Errors Here */}
             {error && (
                 <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
                     {error}
                 </Alert>
             )}
-            
+
             <MaterialReactTable table={table} />
+
+            {/* --- Create Dialog --- */}
+            <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} fullWidth maxWidth="xs">
+                <DialogTitle>Add New Category</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        autoFocus margin="dense" label="Category Title" fullWidth
+                        value={newCategoryTitle} onChange={(e) => setNewCategoryTitle(e.target.value)}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setCreateDialogOpen(false)} disabled={isCreating}>Cancel</Button>
+                    <Button variant="contained" onClick={handleCreate} disabled={isCreating}>
+                        {isCreating ? 'Creating...' : 'Create'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
             {/* --- Edit Dialog --- */}
             <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} fullWidth maxWidth="xs">
@@ -239,12 +290,8 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
                 <DialogContent>
                     <DialogContentText sx={{ mb: 2 }}>Update the category details below.</DialogContentText>
                     <TextField
-                        autoFocus
-                        margin="dense"
-                        label="Category Title"
-                        fullWidth
-                        value={editTitle}
-                        onChange={(e) => setEditTitle(e.target.value)}
+                        autoFocus margin="dense" label="Category Title" fullWidth
+                        value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
                     />
                 </DialogContent>
                 <DialogActions>
@@ -263,16 +310,20 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
                         Are you sure you want to delete the category <strong>{categoryToDelete?.title}</strong>?
                         <br /><br />
                         This action will remove the category from the project.
+                        <br />
+                        <Typography variant="caption" color="text.secondary">
+                            (Note: Deletion will be blocked if this category still contains active groups.)
+                        </Typography>
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>
                         Cancel
                     </Button>
-                    <Button 
-                        onClick={confirmDelete} 
-                        color="error" 
-                        variant="contained" 
+                    <Button
+                        onClick={confirmDelete}
+                        color="error"
+                        variant="contained"
                         disabled={isDeleting}
                         startIcon={isDeleting ? <CircularProgress size={20} color="inherit" /> : <Delete />}
                     >

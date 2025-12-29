@@ -29,17 +29,21 @@ export const LandMultiSelect = <T extends FieldValues>({
         let mounted = true;
         setLoading(true);
         
-        // Fetch lands (The backend service usually filters this by the current context)
-        LandService.getAll({ page: 1, per_page: 100, sort: 'lot', direction: 'asc' })
-            .then((res: any) => {
-                if (mounted) {
-                    setLands(res.data || []);
-                }
-            })
-            .catch(err => console.error("Failed to load lands", err))
-            .finally(() => {
-                if (mounted) setLoading(false);
-            });
+        // Fetch ALL lands for the dropdown
+        LandService.getAll({ 
+            sort: 'lot', 
+            direction: 'asc',
+            get_all: true // <--- Triggers full list fetch
+        })
+        .then((res: any) => {
+            if (mounted) {
+                setLands(res.data || []);
+            }
+        })
+        .catch(err => console.error("Failed to load lands", err))
+        .finally(() => {
+            if (mounted) setLoading(false);
+        });
 
         return () => { mounted = false; };
     }, []);
