@@ -15,8 +15,9 @@ export interface Type {
     status: 'A' | 'I';
     
     // Inputs
-    lot_size_sqft?: number;
-    lot_dimension_text?: string;
+    lot_width?: number;  // New
+    lot_length?: number; // New
+    lot_size_sqft?: number; // Manual override or Calculated result
     unit_count?: number;
     built_up_sqft?: number;
     price_psf?: number;

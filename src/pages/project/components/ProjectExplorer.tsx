@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import {
     List, ListItemButton, ListItemText, ListItemIcon, Collapse,
-    Box, Typography, CircularProgress, IconButton
+    Box, Typography, IconButton
 } from '@mui/material';
 import {
     ExpandLess, ExpandMore,
-    Dashboard, Category as CategoryIcon, FolderOpen, FolderSpecial
+    Dashboard,
+    Category as CategoryIcon,
+    FolderOpen,
+    FolderSpecial,
+    MonetizationOn // NEW: Icon for Cost Categories
 } from '@mui/icons-material';
 import { SelectionState } from '../ProjectDashboard';
 import { CategoryService, Category } from '../../../services/category';
@@ -27,8 +31,8 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
     // Controls which Category ID is expanded to show its groups
     const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
-    // Main "Categories" root folder toggle
-    const [rootCategoriesOpen, setRootCategoriesOpen] = useState(true);
+    // Toggle for the "Development Categories" list
+    const [rootDevCategoriesOpen, setRootDevCategoriesOpen] = useState(true);
 
     useEffect(() => {
         if (!projectId) return;
@@ -36,7 +40,6 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
         const fetchSidebarData = async () => {
             setLoading(true);
             try {
-                // Ensure backend returns 'groups' relation when get_all is true!
                 const res = await CategoryService.getAll({
                     project_id: projectId,
                     get_all: true
@@ -52,7 +55,6 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
         fetchSidebarData();
     }, [projectId, refreshTrigger]);
 
-    // Handle expanding a specific category to see its groups
     const toggleCategory = (catId: string, e: React.MouseEvent) => {
         e.stopPropagation();
         setExpandedCategories(prev => ({
@@ -71,7 +73,7 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
 
             <List component="nav" dense>
 
-                {/* 1. OVERVIEW */}
+                {/* 1. PROJECT OVERVIEW */}
                 <ListItemButton
                     selected={currentSelection.type === 'PROJECT_OVERVIEW'}
                     onClick={() => onSelect({ type: 'PROJECT_OVERVIEW' })}
@@ -80,23 +82,23 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                     <ListItemText primary="Project Overview" />
                 </ListItemButton>
 
-                {/* 2. CATEGORIES ROOT */}
+                {/* 2. DEVELOPMENT CATEGORIES ROOT (Renamed) */}
                 <ListItemButton
                     selected={currentSelection.type === 'CATEGORY_LIST'}
                     onClick={() => onSelect({ type: 'CATEGORY_LIST' })}
                 >
-                    <ListItemIcon><CategoryIcon color="action" /></ListItemIcon>
-                    <ListItemText primary="Categories" />
+                    <ListItemIcon><CategoryIcon color="warning" /></ListItemIcon>
+                    <ListItemText primary="Development Categories" />
                     <IconButton
                         size="small"
-                        onClick={(e) => { e.stopPropagation(); setRootCategoriesOpen(!rootCategoriesOpen); }}
+                        onClick={(e) => { e.stopPropagation(); setRootDevCategoriesOpen(!rootDevCategoriesOpen); }}
                     >
-                        {rootCategoriesOpen ? <ExpandLess /> : <ExpandMore />}
+                        {rootDevCategoriesOpen ? <ExpandLess /> : <ExpandMore />}
                     </IconButton>
                 </ListItemButton>
 
-                {/* 3. CATEGORY LIST */}
-                <Collapse in={rootCategoriesOpen} timeout="auto" unmountOnExit>
+                {/* 3. DEVELOPMENT CATEGORY LIST (Hierarchy) */}
+                <Collapse in={rootDevCategoriesOpen} timeout="auto" unmountOnExit>
                     <List component="div" disablePadding>
                         {categories.map((cat) => {
                             const isExpanded = !!expandedCategories[cat.id];
@@ -115,7 +117,9 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
 
                                         <ListItemText
                                             primary={cat.title}
-                                            primaryTypographyProps={{ noWrap: true, variant: 'body2', fontWeight: 500 }}
+                                            slotProps={{
+                                                primary: { noWrap: true, variant: 'caption' }
+                                            }}
                                         />
 
                                         {/* Expand Arrow for Groups */}
@@ -137,8 +141,8 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                                                 <ListItemButton
                                                     key={grp.id}
                                                     selected={currentSelection.type === 'GROUP_DETAIL' && currentSelection.data?.id === grp.id}
-                                                    onClick={() => onSelect({ type: 'GROUP_DETAIL', data: { ...grp, category: cat } })} // Pass context
-                                                    sx={{ pl: 8 }} // Indent deeper
+                                                    onClick={() => onSelect({ type: 'GROUP_DETAIL', data: { ...grp, category: cat } })}
+                                                    sx={{ pl: 8 }}
                                                 >
                                                     <ListItemIcon sx={{ minWidth: 24 }}>
                                                         <FolderSpecial fontSize="small" sx={{ fontSize: 16, color: '#757575' }} />
@@ -162,6 +166,20 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                         )}
                     </List>
                 </Collapse>
+
+                {/* 4. COST CATEGORIES (NEW) */}
+                {/* This opens the Cost Category List Workspace */}
+                <ListItemButton
+                    // @ts-ignore - Ensure 'COST_CATEGORY_LIST' is added to your SelectionType in Dashboard
+                    selected={currentSelection.type === 'COST_CATEGORY_LIST'}
+                    // @ts-ignore
+                    onClick={() => onSelect({ type: 'COST_CATEGORY_LIST' })}
+                >
+                    <ListItemIcon><MonetizationOn color="secondary" /></ListItemIcon>
+                    <ListItemText primary="Cost Categories" />
+                </ListItemButton>
+
+
             </List>
         </Box>
     );
