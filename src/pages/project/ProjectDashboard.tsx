@@ -13,24 +13,30 @@ import CategoryListWorkspace from './components/workspaces/CategoryListWorkspace
 import ProjectSummaryWorkspace from './components/workspaces/ProjectSummaryWorkspace';
 import GroupListWorkspace from './components/workspaces/GroupListWorkspace';
 import TypeListWorkspace from './components/workspaces/TypeListWorkspace';
-// import ProjectSummaryWorkspace from './components/workspaces/ProjectSummaryWorkspace'; 
+import CostCategoryListWorkspace from './components/workspaces/CostCategoryListWorkspace';
+import CostGroupListWorkspace from './components/workspaces/CostGroupListWorkspace';
+import CostListWorkspace from './components/workspaces/CostListWorkspace';
 
 // --- TYPES ---
-export type SelectionType = 
-    | 'PROJECT_OVERVIEW' 
-    | 'CATEGORY_LIST' 
+export type SelectionType =
+    | 'PROJECT_OVERVIEW'
+    | 'CATEGORY_LIST'
     | 'CATEGORY_DETAIL'
-    | 'GROUP_DETAIL';   // View Types in a Group <--- NEW 
+    | 'GROUP_DETAIL'
+    | 'COST_CATEGORY_LIST'
+    | 'COST_CATEGORY_DETAIL'
+    | 'COST_GROUP_DETAIL'
+    ;
 
 export interface SelectionState {
     type: SelectionType;
-    data?: any; 
+    data?: any;
 }
 
 const ProjectDashboard: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const history = useHistory();
-    
+
     // --- State ---
     const [project, setProject] = useState<Project | null>(null);
     const [loading, setLoading] = useState(true);
@@ -84,21 +90,21 @@ const ProjectDashboard: React.FC = () => {
     return (
         <IonPage>
             <IonContent fullscreen>
-                <PageHeader 
-                    title={project.title} 
+                <PageHeader
+                    title={project.title}
                     showBackButton={true}
                     onBack={() => history.push('/projects')}
                 />
-                
+
                 {/* Main Layout Area */}
                 <Box sx={{ flexGrow: 1, bgcolor: '#f5f5f5', height: 'calc(100vh - 64px)', overflow: 'hidden' }}>
-                    
+
                     {/* MUI v7 Grid2 Syntax */}
                     <Grid container sx={{ height: '100%' }}>
-                        
+
                         {/* LEFT SIDEBAR (Explorer) */}
                         <Grid size={{ xs: 12, md: 3 }} sx={{ borderRight: '1px solid #e0e0e0', bgcolor: '#fff', height: '100%', overflowY: 'auto' }}>
-                            <ProjectExplorer 
+                            <ProjectExplorer
                                 projectId={project.id}
                                 currentSelection={selection}
                                 onSelect={setSelection}
@@ -108,7 +114,7 @@ const ProjectDashboard: React.FC = () => {
 
                         {/* RIGHT PANE (Workspaces) */}
                         <Grid size={{ xs: 12, md: 9 }} sx={{ height: '100%', overflowY: 'auto', p: 3 }}>
-                            
+
                             {/* 1. PROJECT OVERVIEW */}
                             {selection.type === 'PROJECT_OVERVIEW' && (
                                 <ProjectSummaryWorkspace project={project} />
@@ -116,8 +122,8 @@ const ProjectDashboard: React.FC = () => {
 
                             {/* 2. CATEGORY LIST (Manage) */}
                             {selection.type === 'CATEGORY_LIST' && (
-                                <CategoryListWorkspace 
-                                    projectId={project.id} 
+                                <CategoryListWorkspace
+                                    projectId={project.id}
                                     onSelectCategory={(cat) => setSelection({ type: 'CATEGORY_DETAIL', data: cat })}
                                     onCategoryChange={refreshSidebar}
                                 />
@@ -125,8 +131,8 @@ const ProjectDashboard: React.FC = () => {
 
                             {/* 3. CATEGORY DETAIL (Groups) */}
                             {selection.type === 'CATEGORY_DETAIL' && selection.data && (
-                                <GroupListWorkspace 
-                                    projectId={project.id} 
+                                <GroupListWorkspace
+                                    projectId={project.id}
                                     category={selection.data} // Pass the full category object
                                     onSelectGroup={(group) => setSelection({ type: 'GROUP_DETAIL', data: group })}
                                 />
@@ -134,16 +140,44 @@ const ProjectDashboard: React.FC = () => {
 
                             {/* 4. GROUP DETAIL (Show Types) --- NEW */}
                             {selection.type === 'GROUP_DETAIL' && selection.data && (
-                                <TypeListWorkspace 
+                                <TypeListWorkspace
                                     projectId={project.id}
                                     group={selection.data}
-                                    onBack={() => setSelection({ 
-                                        type: 'CATEGORY_DETAIL', 
+                                    onBack={() => setSelection({
+                                        type: 'CATEGORY_DETAIL',
                                         // We need to pass the category back if we want the back button to work perfectly.
                                         // Ideally, the group object should have the category loaded, or we store it in state.
                                         // For now, simple back logic:
                                         data: selection.data.category // Assuming Group object has 'category' relation loaded
                                     })}
+                                />
+                            )}
+
+                            {/* 5. COST CATEGORIES */}
+                            {selection.type === 'COST_CATEGORY_LIST' && (
+                                <CostCategoryListWorkspace 
+                                    projectId={project.id}
+                                    // IMPLEMENTED: Navigate to the detail view (Cost Groups List)
+                                    onSelectCategory={(cat) => setSelection({ type: 'COST_CATEGORY_DETAIL', data: cat })}
+                                />
+                            )}
+
+                            {/* 6. COST CATEGORY DETAIL (Show Cost Groups) */}
+                            {selection.type === 'COST_CATEGORY_DETAIL' && selection.data && (
+                                <CostGroupListWorkspace 
+                                    projectId={project.id}
+                                    costCategory={selection.data}
+                                    // Navigate to Cost Items when "Folder Open" is clicked
+                                    onSelectCostGroup={(grp) => setSelection({ type: 'COST_GROUP_DETAIL', data: { ...grp, category: selection.data } })}
+                                />
+                            )}
+
+                            {/* 7. COST GROUP DETAIL (Show Cost Items) */}
+                            {selection.type === 'COST_GROUP_DETAIL' && selection.data && (
+                                <CostListWorkspace 
+                                    projectId={project.id}
+                                    costCategory={selection.data.category} // Passed via context in explorer
+                                    costGroup={selection.data}
                                 />
                             )}
 

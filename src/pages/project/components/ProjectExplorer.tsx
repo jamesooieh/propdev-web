@@ -9,10 +9,12 @@ import {
     Category as CategoryIcon,
     FolderOpen,
     FolderSpecial,
-    MonetizationOn // NEW: Icon for Cost Categories
+    MonetizationOn,
+    AccountBalanceWallet,
 } from '@mui/icons-material';
 import { SelectionState } from '../ProjectDashboard';
 import { CategoryService, Category } from '../../../services/category';
+import { CostCategoryService, CostCategory } from '../../../services/costCategory';
 import { Group } from '../../../services/group';
 
 interface ProjectExplorerProps {
@@ -25,7 +27,10 @@ interface ProjectExplorerProps {
 const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
     projectId, currentSelection, onSelect, refreshTrigger
 }) => {
-    const [categories, setCategories] = useState<Category[]>([]);
+    const [devCategories, setDevCategories] = useState<Category[]>([]);
+    const [costCategories, setCostCategories] = useState<CostCategory[]>([]);
+
+    const [rootCostCategoriesOpen, setRootCostCategoriesOpen] = useState(true);
     const [loading, setLoading] = useState(false);
 
     // Controls which Category ID is expanded to show its groups
@@ -40,11 +45,23 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
         const fetchSidebarData = async () => {
             setLoading(true);
             try {
-                const res = await CategoryService.getAll({
-                    project_id: projectId,
-                    get_all: true
-                });
-                setCategories(res.data || []);
+                const [devRes, costRes] = await Promise.all([
+                    CategoryService.getAll({
+                        project_id: projectId,
+                        get_all: true,
+                        sort: 'title',
+                        direction: 'asc',
+                    }),
+                    CostCategoryService.getAll({
+                        project_id: projectId,
+                        get_all: true,
+                        sort: 'position',
+                        direction: 'asc',
+                    }),
+                ]);
+
+                setDevCategories(devRes.data || []);
+                setCostCategories(costRes.data || []);
             } catch (error) {
                 console.error("Failed to load explorer", error);
             } finally {
@@ -100,7 +117,7 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                 {/* 3. DEVELOPMENT CATEGORY LIST (Hierarchy) */}
                 <Collapse in={rootDevCategoriesOpen} timeout="auto" unmountOnExit>
                     <List component="div" disablePadding>
-                        {categories.map((cat) => {
+                        {devCategories.map((cat) => {
                             const isExpanded = !!expandedCategories[cat.id];
 
                             return (
@@ -159,7 +176,7 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                             );
                         })}
 
-                        {categories.length === 0 && !loading && (
+                        {devCategories.length === 0 && !loading && (
                             <Typography variant="caption" sx={{ pl: 4, py: 1, display: 'block', color: 'text.secondary' }}>
                                 No categories found
                             </Typography>
@@ -170,14 +187,51 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                 {/* 4. COST CATEGORIES (NEW) */}
                 {/* This opens the Cost Category List Workspace */}
                 <ListItemButton
-                    // @ts-ignore - Ensure 'COST_CATEGORY_LIST' is added to your SelectionType in Dashboard
+                    // @ts-ignore - Remember to update SelectionType in Dashboard
                     selected={currentSelection.type === 'COST_CATEGORY_LIST'}
                     // @ts-ignore
                     onClick={() => onSelect({ type: 'COST_CATEGORY_LIST' })}
                 >
                     <ListItemIcon><MonetizationOn color="secondary" /></ListItemIcon>
                     <ListItemText primary="Cost Categories" />
+                    {/* Collapsible Toggle */}
+                    <IconButton
+                        size="small"
+                        onClick={(e) => { e.stopPropagation(); setRootCostCategoriesOpen(!rootCostCategoriesOpen); }}
+                    >
+                        {rootCostCategoriesOpen ? <ExpandLess /> : <ExpandMore />}
+                    </IconButton>
                 </ListItemButton>
+
+                {/* 5. COST CATEGORY LIST ITEMS */}
+                <Collapse in={rootCostCategoriesOpen} timeout="auto" unmountOnExit>
+                    <List component="div" disablePadding>
+                        {costCategories.map((costCat) => (
+                            <ListItemButton
+                                key={costCat.id}
+                                // @ts-ignore - Remember to update SelectionType in Dashboard
+                                selected={currentSelection.type === 'COST_CATEGORY_DETAIL' && currentSelection.data?.id === costCat.id}
+                                // @ts-ignore
+                                onClick={() => onSelect({ type: 'COST_CATEGORY_DETAIL', data: costCat })}
+                                sx={{ pl: 4 }}
+                            >
+                                <ListItemIcon sx={{ minWidth: 32 }}>
+                                    <AccountBalanceWallet fontSize="small" color="action" />
+                                </ListItemIcon>
+                                <ListItemText
+                                    disableTypography
+                                    primary={<Typography variant="caption" noWrap>{costCat.title}</Typography>}
+                                />
+                            </ListItemButton>
+                        ))}
+
+                        {costCategories.length === 0 && !loading && (
+                            <Typography variant="caption" sx={{ pl: 4, py: 1, display: 'block', color: 'text.secondary' }}>
+                                No cost categories found
+                            </Typography>
+                        )}
+                    </List>
+                </Collapse>
 
 
             </List>

@@ -4,6 +4,7 @@ export interface CostCategory {
     id: string;
     project_id: string;
     title: string;
+    position?: number;
     groups_count?: number; // Optional count from backend
     created_at?: string;
     updated_at?: string;
@@ -35,6 +36,11 @@ export const CostCategoryService = {
 
     update: async (projectId: string, id: string, payload: { title: string }) => {
         const { data } = await api.put(`${buildUrl(projectId)}/${id}`, payload);
+        return data;
+    },
+
+    reorder: async (projectId: string, ids: string[]) => {
+        const { data } = await api.post(`${buildUrl(projectId)}/reorder`, { ids });
         return data;
     },
 
