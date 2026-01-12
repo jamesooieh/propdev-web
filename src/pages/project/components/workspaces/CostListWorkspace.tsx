@@ -132,10 +132,13 @@ const CostListWorkspace: React.FC<CostListWorkspaceProps> = ({
             title: currentCost.title,
             state: currentCost.state || '',
             formula: currentCost.formula || '',
-            // Filter out empty rows and format for backend
             values: currentValues
-                .filter(v => v.unit && v.unit.trim() !== '') // Ensure unit exists
-                .map(v => ({ value: Number(v.value), unit: v.unit! }))
+                .filter(v => v.unit && v.unit.trim() !== '') // Basic validation
+                .map(v => ({ 
+                    label: v.label || '', 
+                    value: Number(v.value), 
+                    unit: v.unit! 
+                }))
         };
 
         try {
