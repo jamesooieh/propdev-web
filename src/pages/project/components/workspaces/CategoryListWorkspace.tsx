@@ -9,13 +9,21 @@ import {
 import {
     Box, IconButton, Tooltip, Chip, Button, Dialog, DialogTitle,
     DialogContent, DialogContentText, DialogActions, TextField,
-    Typography, Alert, CircularProgress
+    Typography, Alert, CircularProgress,
+    Grid,
+    Divider
 } from '@mui/material';
-import { Edit, Delete, FolderOpen, Refresh, Add, Warning } from '@mui/icons-material';
+import { Edit, Delete, FolderOpen, Refresh, Add, Warning, RemoveCircleOutline } from '@mui/icons-material';
 
 // Services & Enums
 import { CategoryService, Category } from '../../../../services/category';
 import { CategoryStatus, CategoryStatusLabels } from '../../../../enums';
+
+// 🆕 Interface for the local group state inside the dialog
+interface LocalGroupState {
+    id?: string; // Existing groups have IDs
+    title: string;
+}
 
 interface CategoryListWorkspaceProps {
     projectId: string;
@@ -35,15 +43,26 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
     const [sorting, setSorting] = useState<MRT_SortingState>([{ id: 'title', desc: false }]);
     const [pagination, setPagination] = useState<MRT_PaginationState>({ pageIndex: 0, pageSize: 10 });
 
-    // --- Create Dialog State ---
+    // --- 🔧 Unified Dialog State ---
+    // We consolidate Create/Edit states here to handle nested data easier
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
-    const [newCategoryTitle, setNewCategoryTitle] = useState('');
-    const [isCreating, setIsCreating] = useState(false);
-
-    // --- Edit Dialog State ---
     const [editDialogOpen, setEditDialogOpen] = useState(false);
-    const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-    const [editTitle, setEditTitle] = useState('');
+
+    // 🆕 Form Data State (Used for both Create and Edit)
+    const [formTitle, setFormTitle] = useState('');
+    const [formGroups, setFormGroups] = useState<LocalGroupState[]>([]);
+    const [editingId, setEditingId] = useState<string | null>(null); // To track which ID we are editing
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // // --- Create Dialog State ---
+    // const [createDialogOpen, setCreateDialogOpen] = useState(false);
+    // const [newCategoryTitle, setNewCategoryTitle] = useState('');
+    // const [isCreating, setIsCreating] = useState(false);
+
+    // // --- Edit Dialog State ---
+    // const [editDialogOpen, setEditDialogOpen] = useState(false);
+    // const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+    // const [editTitle, setEditTitle] = useState('');
 
     // --- Delete Dialog State ---
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -62,6 +81,7 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
                 search: globalFilter || undefined,
                 sort: sorting.length > 0 ? sorting[0].id : 'created_at',
                 direction: (sorting.length > 0 ? (sorting[0].desc ? 'desc' : 'asc') : 'desc') as 'asc' | 'desc',
+                get_all_groups: true // 🆕 Hint to backend to return groups
             };
 
             const res = await CategoryService.getAll(queryParams);
@@ -78,54 +98,138 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
 
     useEffect(() => { fetchCategories(); }, [projectId, pagination.pageIndex, pagination.pageSize, sorting, globalFilter]);
 
+    // 🆕 --- Nested Group Logic (Local Form Actions) ---
+
+    const handleAddGroupRow = () => {
+        setFormGroups([...formGroups, { title: '' }]);
+    };
+
+    const handleRemoveGroupRow = (index: number) => {
+        const updated = [...formGroups];
+        updated.splice(index, 1);
+        setFormGroups(updated);
+    };
+
+    const handleGroupTitleChange = (index: number, val: string) => {
+        const updated = [...formGroups];
+        updated[index].title = val;
+        setFormGroups(updated);
+    };
+
     // --- Create Logic ---
+    const handleOpenCreate = () => {
+        // 🔧 Reset unified form state
+        setFormTitle('');
+        setFormGroups([]);
+        setEditingId(null);
+        setCreateDialogOpen(true);
+    };
+
     const handleCreate = async () => {
-        if (!newCategoryTitle.trim()) return;
-        setIsCreating(true);
+        if (!formTitle.trim()) return;
+        setIsSubmitting(true); // 🔧 Renamed from isCreating
         try {
             await CategoryService.create({
                 project_id: projectId,
-                title: newCategoryTitle,
-                status: CategoryStatus.ACTIVE
+                title: formTitle,
+                status: CategoryStatus.ACTIVE,
+                groups: formGroups.filter(g => g.title.trim() !== '') // 🆕 Send groups
             });
             setCreateDialogOpen(false);
-            setNewCategoryTitle('');
-
-            // Refresh local list AND sidebar
             fetchCategories();
             onCategoryChange();
         } catch (e) {
             alert("Failed to create category");
         } finally {
-            setIsCreating(false);
+            setIsSubmitting(false);
         }
     };
 
     // --- Edit Logic ---
-    const openEditDialog = (category: Category) => {
-        setEditingCategory(category);
-        setEditTitle(category.title);
+    const handleOpenEdit = (category: Category) => {
+        // 🔧 Populate unified form state
+        setFormTitle(category.title);
+        setEditingId(category.id);
+
+        // 🆕 Map existing groups to local state
+        const existingGroups = category.groups?.map(g => ({
+            id: g.id,
+            title: g.title
+        })) || [];
+
+        setFormGroups(existingGroups);
         setEditDialogOpen(true);
         setError(null);
     };
 
     const handleSaveEdit = async () => {
-        if (!editingCategory || !editTitle.trim()) return;
+        if (!editingId || !formTitle.trim()) return;
+        setIsSubmitting(true);
 
         try {
-            await CategoryService.update(projectId, editingCategory.id, {
-                title: editTitle,
-                status: editingCategory.status
+            await CategoryService.update(projectId, editingId, {
+                title: formTitle,
+                // 🆕 Backend will need to sync these
+                groups: formGroups.filter(g => g.title.trim() !== '')
             });
             setEditDialogOpen(false);
-
-            // Refresh local list AND sidebar (in case title changed)
             fetchCategories();
             onCategoryChange();
         } catch (e) {
             setError("Failed to update category.");
+        } finally {
+            setIsSubmitting(false);
         }
     };
+
+    // // --- Create Logic ---
+    // const handleCreate = async () => {
+    //     if (!newCategoryTitle.trim()) return;
+    //     setIsCreating(true);
+    //     try {
+    //         await CategoryService.create({
+    //             project_id: projectId,
+    //             title: newCategoryTitle,
+    //             status: CategoryStatus.ACTIVE
+    //         });
+    //         setCreateDialogOpen(false);
+    //         setNewCategoryTitle('');
+
+    //         // Refresh local list AND sidebar
+    //         fetchCategories();
+    //         onCategoryChange();
+    //     } catch (e) {
+    //         alert("Failed to create category");
+    //     } finally {
+    //         setIsCreating(false);
+    //     }
+    // };
+
+    // // --- Edit Logic ---
+    // const openEditDialog = (category: Category) => {
+    //     setEditingCategory(category);
+    //     setEditTitle(category.title);
+    //     setEditDialogOpen(true);
+    //     setError(null);
+    // };
+
+    // const handleSaveEdit = async () => {
+    //     if (!editingCategory || !editTitle.trim()) return;
+
+    //     try {
+    //         await CategoryService.update(projectId, editingCategory.id, {
+    //             title: editTitle,
+    //             status: editingCategory.status
+    //         });
+    //         setEditDialogOpen(false);
+
+    //         // Refresh local list AND sidebar (in case title changed)
+    //         fetchCategories();
+    //         onCategoryChange();
+    //     } catch (e) {
+    //         setError("Failed to update category.");
+    //     }
+    // };
 
     // --- Delete Logic ---
     const handleDeleteClick = (category: Category) => {
@@ -223,7 +327,10 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
                 </Tooltip>
 
                 <Tooltip title="Edit">
-                    <IconButton color="primary" onClick={() => openEditDialog(row.original)}>
+                    {/* <IconButton color="primary" onClick={() => openEditDialog(row.original)}>
+                        <Edit />
+                    </IconButton> */}
+                    <IconButton color="primary" onClick={() => handleOpenEdit(row.original)}>
                         <Edit />
                     </IconButton>
                 </Tooltip>
@@ -243,6 +350,54 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
         ),
     });
 
+    // 🆕 Helper to render the form content (Shared by Create & Edit)
+    const renderDialogContent = () => (
+        <Box sx={{ mt: 1 }}>
+            <TextField
+                autoFocus margin="dense" label="Category Title" fullWidth
+                value={formTitle} onChange={(e) => setFormTitle(e.target.value)}
+            />
+
+            {/* Groups Section Header */}
+            <Box sx={{ mt: 3, mb: 1 }}>
+                <Grid container justifyContent="space-between" alignItems="center">
+                    <Typography variant="subtitle2" color="primary">Associated Groups</Typography>
+                    <Button size="small" startIcon={<Add />} onClick={handleAddGroupRow}>
+                        Add Group
+                    </Button>
+                </Grid>
+                <Divider sx={{ my: 1 }} />
+            </Box>
+
+            {/* Groups List */}
+            <Box sx={{ maxHeight: '250px', overflowY: 'auto', pr: 1 }}>
+                {formGroups.map((group, index) => (
+                    <Grid container spacing={1} key={index} alignItems="center" sx={{ mb: 1 }}>
+                        <Grid size={{ xs: 10 }}>
+                            <TextField
+                                placeholder="Group Title"
+                                fullWidth
+                                size="small"
+                                value={group.title}
+                                onChange={(e) => handleGroupTitleChange(index, e.target.value)}
+                            />
+                        </Grid>
+                        <Grid size={{ xs: 2 }} sx={{ textAlign: 'center' }}>
+                            <IconButton size="small" color="error" onClick={() => handleRemoveGroupRow(index)}>
+                                <RemoveCircleOutline fontSize="small" />
+                            </IconButton>
+                        </Grid>
+                    </Grid>
+                ))}
+                {formGroups.length === 0 && (
+                    <Typography variant="caption" color="textSecondary" sx={{ fontStyle: 'italic' }}>
+                        No groups added yet.
+                    </Typography>
+                )}
+            </Box>
+        </Box>
+    );
+
     return (
         <Box>
             {/* Header Area */}
@@ -252,7 +407,8 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
                 <Button
                     variant="contained"
                     startIcon={<Add />}
-                    onClick={() => setCreateDialogOpen(true)}
+                    // onClick={() => setCreateDialogOpen(true)}
+                    onClick={handleOpenCreate} // 🔧 Switched to handleOpenCreate
                 >
                     Add Category
                 </Button>
@@ -271,15 +427,22 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
             <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} fullWidth maxWidth="xs">
                 <DialogTitle>Add New Category</DialogTitle>
                 <DialogContent>
-                    <TextField
+                    {/* <TextField
                         autoFocus margin="dense" label="Category Title" fullWidth
                         value={newCategoryTitle} onChange={(e) => setNewCategoryTitle(e.target.value)}
-                    />
+                    /> */}
+                    {renderDialogContent()} {/* 🆕 Render Shared Form */}
                 </DialogContent>
-                <DialogActions>
+                {/* <DialogActions>
                     <Button onClick={() => setCreateDialogOpen(false)} disabled={isCreating}>Cancel</Button>
                     <Button variant="contained" onClick={handleCreate} disabled={isCreating}>
                         {isCreating ? 'Creating...' : 'Create'}
+                    </Button>
+                </DialogActions> */}
+                <DialogActions>
+                    <Button onClick={() => setCreateDialogOpen(false)} disabled={isSubmitting}>Cancel</Button>
+                    <Button variant="contained" onClick={handleCreate} disabled={isSubmitting}>
+                        {isSubmitting ? 'Creating...' : 'Create'}
                     </Button>
                 </DialogActions>
             </Dialog>
@@ -289,14 +452,21 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
                 <DialogTitle>Edit Category</DialogTitle>
                 <DialogContent>
                     <DialogContentText sx={{ mb: 2 }}>Update the category details below.</DialogContentText>
-                    <TextField
+                    {/* <TextField
                         autoFocus margin="dense" label="Category Title" fullWidth
                         value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
-                    />
+                    /> */}
+                    {renderDialogContent()} {/* 🆕 Render Shared Form */}
                 </DialogContent>
-                <DialogActions>
+                {/* <DialogActions>
                     <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
                     <Button onClick={handleSaveEdit} variant="contained">Save Changes</Button>
+                </DialogActions> */}
+                <DialogActions>
+                    <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+                    <Button onClick={handleSaveEdit} variant="contained" disabled={isSubmitting}>
+                        {isSubmitting ? 'Saving...' : 'Save Changes'}
+                    </Button>
                 </DialogActions>
             </Dialog>
 
