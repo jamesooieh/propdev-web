@@ -1,5 +1,6 @@
 import { GroupStatus } from '../enums'; // Ensure you have this Enum
 import api from './api';
+import { Type } from './type';
 
 export interface Group {
     id: string;
@@ -7,6 +8,7 @@ export interface Group {
     title: string;
     status: GroupStatus;
     description?: string;
+    types: any[];
     
     // Timestamps
     created_at?: string;

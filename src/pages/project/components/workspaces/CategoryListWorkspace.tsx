@@ -11,18 +11,27 @@ import {
     DialogContent, DialogContentText, DialogActions, TextField,
     Typography, Alert, CircularProgress,
     Grid,
-    Divider
+    Divider,
+    Collapse
 } from '@mui/material';
-import { Edit, Delete, FolderOpen, Refresh, Add, Warning, RemoveCircleOutline } from '@mui/icons-material';
+import { Edit, Delete, FolderOpen, Refresh, Add, Warning, RemoveCircleOutline, ExpandMore, ExpandLess } from '@mui/icons-material';
 
 // Services & Enums
 import { CategoryService, Category } from '../../../../services/category';
 import { CategoryStatus, CategoryStatusLabels } from '../../../../enums';
 
+// 🆕 Interface for Level 3: Types (Only Title required per backend)
+interface LocalTypeState {
+    id?: string;
+    title: string;
+}
+
 // 🆕 Interface for the local group state inside the dialog
 interface LocalGroupState {
     id?: string; // Existing groups have IDs
     title: string;
+    types: LocalTypeState[]; // 🆕 Nested Types Array
+    isExpanded?: boolean;    // 🆕 UI State for collapsing
 }
 
 interface CategoryListWorkspaceProps {
@@ -100,8 +109,9 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
 
     // 🆕 --- Nested Group Logic (Local Form Actions) ---
 
+    // 🔧 Updated to initialize types array and expanded state
     const handleAddGroupRow = () => {
-        setFormGroups([...formGroups, { title: '' }]);
+        setFormGroups([...formGroups, { title: '', types: [], isExpanded: true }]);
     };
 
     const handleRemoveGroupRow = (index: number) => {
@@ -110,10 +120,40 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
         setFormGroups(updated);
     };
 
-    const handleGroupTitleChange = (index: number, val: string) => {
+    // 🆕 Toggle Group Expansion
+    const handleToggleGroupExpand = (index: number) => {
         const updated = [...formGroups];
-        updated[index].title = val;
+        updated[index].isExpanded = !updated[index].isExpanded;
         setFormGroups(updated);
+    };
+
+    // 🔧 Generic handler for Group fields
+    const handleGroupChange = (index: number, field: keyof LocalGroupState, val: any) => {
+        const updated = [...formGroups];
+        // @ts-ignore
+        updated[index][field] = val;
+        setFormGroups(updated);
+    };
+
+    // 🆕 Add Type Row
+    const handleAddTypeRow = (groupIndex: number) => {
+        const updatedGroups = [...formGroups];
+        updatedGroups[groupIndex].types.push({ title: '' });
+        setFormGroups(updatedGroups);
+    };
+
+    // 🆕 Remove Type Row
+    const handleRemoveTypeRow = (groupIndex: number, typeIndex: number) => {
+        const updatedGroups = [...formGroups];
+        updatedGroups[groupIndex].types.splice(typeIndex, 1);
+        setFormGroups(updatedGroups);
+    };
+
+    // 🆕 Handle Type Title Change
+    const handleTypeTitleChange = (groupIndex: number, typeIndex: number, val: string) => {
+        const updatedGroups = [...formGroups];
+        updatedGroups[groupIndex].types[typeIndex].title = val;
+        setFormGroups(updatedGroups);
     };
 
     // --- Create Logic ---
@@ -132,8 +172,14 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
             await CategoryService.create({
                 project_id: projectId,
                 title: formTitle,
-                status: CategoryStatus.ACTIVE,
-                groups: formGroups.filter(g => g.title.trim() !== '') // 🆕 Send groups
+
+                // 🔧 Send Groups AND Nested Types
+                groups: formGroups
+                    .filter(g => g.title.trim() !== '')
+                    .map(g => ({
+                        title: g.title,
+                        types: g.types.filter(t => t.title.trim() !== '') // 🆕 Filter valid types
+                    })),
             });
             setCreateDialogOpen(false);
             fetchCategories();
@@ -151,10 +197,17 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
         setFormTitle(category.title);
         setEditingId(category.id);
 
-        // 🆕 Map existing groups to local state
-        const existingGroups = category.groups?.map(g => ({
+        // 🔧 Map existing Groups AND Types from API to local state
+        const existingGroups: LocalGroupState[] = category.groups?.map(g => ({
             id: g.id,
-            title: g.title
+            title: g.title,
+            isExpanded: false, // Default collapsed
+            // 🆕 Map nested types (Assuming backend loads 'types' on group object)
+            // @ts-ignore 
+            types: g.types?.map((t: any) => ({
+                id: t.id,
+                title: t.title
+            })) || []
         })) || [];
 
         setFormGroups(existingGroups);
@@ -169,8 +222,15 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
         try {
             await CategoryService.update(projectId, editingId, {
                 title: formTitle,
-                // 🆕 Backend will need to sync these
-                groups: formGroups.filter(g => g.title.trim() !== '')
+
+                // 🔧 Send deep structure
+                groups: formGroups
+                    .filter(g => g.title.trim() !== '')
+                    .map(g => ({
+                        id: g.id,
+                        title: g.title,
+                        types: g.types.filter(t => t.title.trim() !== '') // 🆕 Nested Types
+                    })),
             });
             setEditDialogOpen(false);
             fetchCategories();
@@ -350,7 +410,7 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
         ),
     });
 
-    // 🆕 Helper to render the form content (Shared by Create & Edit)
+    // 🔧 Helper to render the form content (Shared by Create & Edit)
     const renderDialogContent = () => (
         <Box sx={{ mt: 1 }}>
             <TextField
@@ -361,7 +421,7 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
             {/* Groups Section Header */}
             <Box sx={{ mt: 3, mb: 1 }}>
                 <Grid container justifyContent="space-between" alignItems="center">
-                    <Typography variant="subtitle2" color="primary">Associated Groups</Typography>
+                    <Typography variant="subtitle2" color="primary">Groups & Types Hierarchy</Typography>
                     <Button size="small" startIcon={<Add />} onClick={handleAddGroupRow}>
                         Add Group
                     </Button>
@@ -370,27 +430,85 @@ const CategoryListWorkspace: React.FC<CategoryListWorkspaceProps> = ({ projectId
             </Box>
 
             {/* Groups List */}
-            <Box sx={{ maxHeight: '250px', overflowY: 'auto', pr: 1 }}>
-                {formGroups.map((group, index) => (
-                    <Grid container spacing={1} key={index} alignItems="center" sx={{ mb: 1 }}>
-                        <Grid size={{ xs: 10 }}>
-                            <TextField
-                                placeholder="Group Title"
-                                fullWidth
-                                size="small"
-                                value={group.title}
-                                onChange={(e) => handleGroupTitleChange(index, e.target.value)}
-                            />
+            <Box sx={{ maxHeight: '400px', overflowY: 'auto', pr: 1 }}>
+                {formGroups.map((group, gIndex) => (
+                    // 🔧 Wrapped in a Box with border
+                    <Box key={gIndex} sx={{ mb: 2, border: '1px solid #eee', borderRadius: 1, p: 1 }}>
+                        <Grid container spacing={1} alignItems="center">
+                            {/* 🆕 Expand Button */}
+                            <Grid size={{ xs: 1 }}>
+                                <IconButton 
+                                    size="small" 
+                                    onClick={() => handleToggleGroupExpand(gIndex)}
+                                >
+                                    {group.isExpanded ? <ExpandLess /> : <ExpandMore />}
+                                </IconButton>
+                            </Grid>
+                            <Grid size={{ xs: 9 }}>
+                                <TextField
+                                    placeholder="Group Title (e.g. Residential)"
+                                    fullWidth
+                                    size="small"
+                                    value={group.title}
+                                    onChange={(e) => handleGroupChange(gIndex, 'title', e.target.value)}
+                                />
+                            </Grid>
+                            <Grid size={{ xs: 2 }} sx={{ textAlign: 'center' }}>
+                                <IconButton size="small" color="error" onClick={() => handleRemoveGroupRow(gIndex)}>
+                                    <RemoveCircleOutline fontSize="small" />
+                                </IconButton>
+                            </Grid>
                         </Grid>
-                        <Grid size={{ xs: 2 }} sx={{ textAlign: 'center' }}>
-                            <IconButton size="small" color="error" onClick={() => handleRemoveGroupRow(index)}>
-                                <RemoveCircleOutline fontSize="small" />
-                            </IconButton>
-                        </Grid>
-                    </Grid>
+
+                        {/* 🆕 Level 3: Nested Types (Collapsible) */}
+                        <Collapse in={group.isExpanded} unmountOnExit>
+                             <Box sx={{ pl: 2, mt: 1, borderLeft: '3px solid #f0f0f0', ml: 2, py: 1 }}>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1, pr: 1 }}>
+                                    <Typography variant="caption" color="textSecondary" sx={{ fontWeight: 'bold', mt: 0.5 }}>
+                                        TYPES
+                                    </Typography>
+                                    <Button 
+                                        size="small" 
+                                        sx={{ fontSize: '0.7rem', py: 0, minWidth: 'auto' }} 
+                                        startIcon={<Add sx={{ fontSize: '1rem !important' }} />} 
+                                        onClick={() => handleAddTypeRow(gIndex)}
+                                    >
+                                        Add Type
+                                    </Button>
+                                </Box>
+
+                                {group.types.map((type, tIndex) => (
+                                    <Grid container spacing={1} key={tIndex} alignItems="center" sx={{ mb: 1 }}>
+                                        <Grid size={{ xs: 10 }}>
+                                            <TextField 
+                                                placeholder="Type Title (e.g. Type A)"
+                                                fullWidth 
+                                                size="small"
+                                                variant="standard" // 🆕 Visual distinction
+                                                value={type.title}
+                                                onChange={(e) => handleTypeTitleChange(gIndex, tIndex, e.target.value)}
+                                            />
+                                        </Grid>
+                                        <Grid size={{ xs: 2 }} sx={{ textAlign: 'center' }}>
+                                            <IconButton size="small" onClick={() => handleRemoveTypeRow(gIndex, tIndex)}>
+                                                <RemoveCircleOutline fontSize="small" color="action" />
+                                            </IconButton>
+                                        </Grid>
+                                    </Grid>
+                                ))}
+
+                                {group.types.length === 0 && (
+                                    <Typography variant="caption" color="textSecondary" sx={{ fontStyle: 'italic', display: 'block' }}>
+                                        No types added.
+                                    </Typography>
+                                )}
+                            </Box>
+                        </Collapse>
+                    </Box>
                 ))}
+                
                 {formGroups.length === 0 && (
-                    <Typography variant="caption" color="textSecondary" sx={{ fontStyle: 'italic' }}>
+                    <Typography variant="caption" color="textSecondary" sx={{ fontStyle: 'italic', display: 'block', textAlign: 'center' }}>
                         No groups added yet.
                     </Typography>
                 )}

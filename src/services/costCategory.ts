@@ -5,6 +5,7 @@ export interface CostCategory {
     project_id: string;
     title: string;
     position?: number;
+    groups: any[];
     groups_count?: number; // Optional count from backend
     created_at?: string;
     updated_at?: string;

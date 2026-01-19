@@ -9,9 +9,10 @@ import {
 import { 
     Box, IconButton, Tooltip, Chip, Button, Dialog, DialogTitle, 
     DialogContent, DialogContentText, DialogActions, TextField, 
-    Typography, Alert, CircularProgress 
+    Typography, Alert, CircularProgress,
+    Grid, Divider,
 } from '@mui/material';
-import { Edit, Delete, Refresh, Add, Warning, FolderOpen } from '@mui/icons-material';
+import { Edit, Delete, Refresh, Add, Warning, FolderOpen, RemoveCircleOutline } from '@mui/icons-material';
 
 // Services & Enums
 import { GroupService, Group } from '../../../../services/group';
@@ -23,6 +24,12 @@ const GroupStatusLabels: Record<string, string> = {
     'A': 'Active',
     'I': 'Inactive'
 };
+
+// 🆕 Interface for Level 3: Types (Local State)
+interface LocalTypeState {
+    id?: string;
+    title: string;
+}
 
 interface GroupListWorkspaceProps {
     projectId: string;
@@ -42,15 +49,15 @@ const GroupListWorkspace: React.FC<GroupListWorkspaceProps> = ({ projectId, cate
     const [sorting, setSorting] = useState<MRT_SortingState>([{ id: 'title', desc: false }]);
     const [pagination, setPagination] = useState<MRT_PaginationState>({ pageIndex: 0, pageSize: 10 });
 
-    // --- Create Dialog ---
+    // --- 🔧 Unified Dialog State ---
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
-    const [newTitle, setNewTitle] = useState('');
-    const [isCreating, setIsCreating] = useState(false);
-
-    // --- Edit Dialog ---
     const [editDialogOpen, setEditDialogOpen] = useState(false);
-    const [editingGroup, setEditingGroup] = useState<Group | null>(null);
-    const [editTitle, setEditTitle] = useState('');
+    
+    // 🆕 Form Data State (Shared for Create/Edit)
+    const [formTitle, setFormTitle] = useState('');
+    const [formTypes, setFormTypes] = useState<LocalTypeState[]>([]);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // --- Delete Dialog ---
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -86,45 +93,88 @@ const GroupListWorkspace: React.FC<GroupListWorkspaceProps> = ({ projectId, cate
         fetchGroups(); 
     }, [projectId, category.id, pagination.pageIndex, pagination.pageSize, sorting, globalFilter]);
 
+    // 🆕 --- Nested Type Logic (Local Form Actions) ---
+    const handleAddTypeRow = () => {
+        setFormTypes([...formTypes, { title: '' }]);
+    };
+
+    const handleRemoveTypeRow = (index: number) => {
+        const updated = [...formTypes];
+        updated.splice(index, 1);
+        setFormTypes(updated);
+    };
+
+    const handleTypeChange = (index: number, field: keyof LocalTypeState, val: any) => {
+        const updated = [...formTypes];
+        // @ts-ignore
+        updated[index][field] = val;
+        setFormTypes(updated);
+    };
+
+    // --- Create Logic ---
+    const handleOpenCreate = () => {
+        // 🔧 Reset form
+        setFormTitle('');
+        setFormTypes([]);
+        setEditingId(null);
+        setCreateDialogOpen(true);
+    };
+
     // --- Create Logic ---
     const handleCreate = async () => {
-        if (!newTitle.trim()) return;
-        setIsCreating(true);
+        if (!formTitle.trim()) return;
+        setIsSubmitting(true); // 🔧 Renamed from isCreating
         try {
             await GroupService.create({
                 project_id: projectId,
                 category_id: category.id,
-                title: newTitle,
-                status: 'A' as GroupStatus // Default status
+                title: formTitle,
+                status: 'A' as GroupStatus,
+                // 🆕 Send Nested Types
+                types: formTypes.filter(t => t.title.trim() !== '')
             });
             setCreateDialogOpen(false);
-            setNewTitle('');
             fetchGroups();
         } catch (e) {
             alert("Failed to create group");
         } finally {
-            setIsCreating(false);
+            setIsSubmitting(false);
         }
     };
 
     // --- Edit Logic ---
-    const openEditDialog = (group: Group) => {
-        setEditingGroup(group);
-        setEditTitle(group.title);
+    const handleOpenEdit = (group: Group) => {
+        // 🔧 Populate form
+        setFormTitle(group.title);
+        setEditingId(group.id);
+        
+        // 🆕 Map existing types to local state
+        // @ts-ignore - Assuming backend returns 'types'
+        const existingTypes = group.types?.map((t: any) => ({
+            id: t.id,
+            title: t.title,
+        })) || [];
+        
+        setFormTypes(existingTypes);
         setEditDialogOpen(true);
     };
 
     const handleSaveEdit = async () => {
-        if (!editingGroup || !editTitle.trim()) return;
+        if (!editingId || !formTitle.trim()) return;
+        setIsSubmitting(true);
         try {
-            await GroupService.update(projectId, category.id, editingGroup.id, {
-                title: editTitle,
-                status: 'A' as GroupStatus // Default status
+            await GroupService.update(projectId, category.id, editingId, {
+                title: formTitle,
+                status: 'A' as GroupStatus,
+                // 🆕 Send Nested Types
+                types: formTypes.filter(t => t.title.trim() !== '')
             });
             setEditDialogOpen(false);
             fetchGroups();
         } catch (e) {
             setError("Failed to update group.");
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -170,6 +220,17 @@ const GroupListWorkspace: React.FC<GroupListWorkspaceProps> = ({ projectId, cate
                     />
                 )
             },
+
+            {
+                id: 'types_count',
+                header: 'Types',
+                size: 100,
+                Cell: ({ row }) => {
+                    // @ts-ignore
+                    const count = row.original.types?.length || 0;
+                    return <Chip label={count} size="small" />;
+                }
+            },
         ],
         []
     );
@@ -199,7 +260,7 @@ const GroupListWorkspace: React.FC<GroupListWorkspaceProps> = ({ projectId, cate
                 </Tooltip>
                 
                 <Tooltip title="Edit">
-                    <IconButton color="primary" onClick={() => openEditDialog(row.original)}>
+                    <IconButton color="primary" onClick={() => handleOpenEdit(row.original)}>
                         <Edit />
                     </IconButton>
                 </Tooltip>
@@ -217,6 +278,55 @@ const GroupListWorkspace: React.FC<GroupListWorkspaceProps> = ({ projectId, cate
             </Button>
         ),
     });
+
+    // 🆕 Helper to render the Dialog Form
+    const renderDialogContent = () => (
+        <Box sx={{ mt: 1 }}>
+            <TextField
+                autoFocus margin="dense" label="Group Title" fullWidth
+                value={formTitle} onChange={(e) => setFormTitle(e.target.value)}
+            />
+
+            {/* Types Header */}
+            <Box sx={{ mt: 3, mb: 1 }}>
+                <Grid container justifyContent="space-between" alignItems="center">
+                    <Typography variant="subtitle2" color="primary">Associated Types</Typography>
+                    <Button size="small" startIcon={<Add />} onClick={handleAddTypeRow}>
+                        Add Type
+                    </Button>
+                </Grid>
+                <Divider sx={{ my: 1 }} />
+            </Box>
+
+            {/* Types List */}
+            <Box sx={{ maxHeight: '300px', overflowY: 'auto', pr: 1 }}>
+                {formTypes.map((type, index) => (
+                    <Grid container spacing={1} key={index} alignItems="center" sx={{ mb: 1 }}>
+                        <Grid size={{ xs: 10 }}>
+                            <TextField 
+                                placeholder="Type Title (e.g. Type A)"
+                                fullWidth 
+                                size="small"
+                                value={type.title}
+                                onChange={(e) => handleTypeChange(index, 'title', e.target.value)}
+                            />
+                        </Grid>
+                        <Grid size={{ xs: 2 }} sx={{ textAlign: 'center' }}>
+                            <IconButton size="small" color="error" onClick={() => handleRemoveTypeRow(index)}>
+                                <RemoveCircleOutline fontSize="small" />
+                            </IconButton>
+                        </Grid>
+                    </Grid>
+                ))}
+                
+                {formTypes.length === 0 && (
+                    <Typography variant="caption" color="textSecondary" sx={{ fontStyle: 'italic', display: 'block', textAlign: 'center' }}>
+                        No types added yet.
+                    </Typography>
+                )}
+            </Box>
+        </Box>
+    );
 
     return (
         <Box>
@@ -237,33 +347,31 @@ const GroupListWorkspace: React.FC<GroupListWorkspaceProps> = ({ projectId, cate
             
             <MaterialReactTable table={table} />
 
-            {/* Create Dialog */}
-            <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} fullWidth maxWidth="xs">
+            {/* Create Dialog 🔧 */}
+            <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} fullWidth maxWidth="sm">
                 <DialogTitle>Add New Group</DialogTitle>
                 <DialogContent>
-                    <TextField 
-                        autoFocus margin="dense" label="Group Title" fullWidth 
-                        value={newTitle} onChange={(e) => setNewTitle(e.target.value)}
-                    />
+                    {renderDialogContent()} {/* 🆕 Render Shared Form */}
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
-                    <Button variant="contained" onClick={handleCreate} disabled={isCreating}>Create</Button>
+                    <Button onClick={() => setCreateDialogOpen(false)} disabled={isSubmitting}>Cancel</Button>
+                    <Button variant="contained" onClick={handleCreate} disabled={isSubmitting}>
+                        {isSubmitting ? 'Creating...' : 'Create'}
+                    </Button>
                 </DialogActions>
             </Dialog>
 
-            {/* Edit Dialog */}
-            <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} fullWidth maxWidth="xs">
+            {/* Edit Dialog 🔧 */}
+            <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} fullWidth maxWidth="sm">
                 <DialogTitle>Edit Group</DialogTitle>
                 <DialogContent>
-                    <TextField
-                        autoFocus margin="dense" label="Group Title" fullWidth
-                        value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
-                    />
+                    {renderDialogContent()} {/* 🆕 Render Shared Form */}
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setEditDialogOpen(false)}>Cancel</Button>
-                    <Button onClick={handleSaveEdit} variant="contained">Save</Button>
+                    <Button onClick={handleSaveEdit} variant="contained" disabled={isSubmitting}>
+                        {isSubmitting ? 'Saving...' : 'Save'}
+                    </Button>
                 </DialogActions>
             </Dialog>
 

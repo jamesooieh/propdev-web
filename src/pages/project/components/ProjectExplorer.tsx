@@ -11,11 +11,13 @@ import {
     FolderSpecial,
     MonetizationOn,
     AccountBalanceWallet,
+    ReceiptLong,
 } from '@mui/icons-material';
 import { SelectionState } from '../ProjectDashboard';
 import { CategoryService, Category } from '../../../services/category';
 import { CostCategoryService, CostCategory } from '../../../services/costCategory';
 import { Group } from '../../../services/group';
+import { CostGroup } from '../../../services/costGroup';
 
 interface ProjectExplorerProps {
     projectId: string;
@@ -29,15 +31,15 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
 }) => {
     const [devCategories, setDevCategories] = useState<Category[]>([]);
     const [costCategories, setCostCategories] = useState<CostCategory[]>([]);
-
-    const [rootCostCategoriesOpen, setRootCostCategoriesOpen] = useState(true);
     const [loading, setLoading] = useState(false);
 
-    // Controls which Category ID is expanded to show its groups
-    const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
-
-    // Toggle for the "Development Categories" list
+    // Toggle for Root Lists
     const [rootDevCategoriesOpen, setRootDevCategoriesOpen] = useState(true);
+    const [rootCostCategoriesOpen, setRootCostCategoriesOpen] = useState(true);
+
+    // 🆕 Split State: Separate expansion state for Dev vs Cost to avoid ID collisions
+    const [expandedDevCats, setExpandedDevCats] = useState<Record<string, boolean>>({});
+    const [expandedCostCats, setExpandedCostCats] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
         if (!projectId) return;
@@ -54,7 +56,7 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                     }),
                     CostCategoryService.getAll({
                         project_id: projectId,
-                        get_all: true,
+                        get_all: true, // 🔧 Backend must return 'groups' relation here
                         sort: 'position',
                         direction: 'asc',
                     }),
@@ -72,12 +74,16 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
         fetchSidebarData();
     }, [projectId, refreshTrigger]);
 
-    const toggleCategory = (catId: string, e: React.MouseEvent) => {
+    // 🔧 Toggle Logic for Development Categories
+    const toggleDevCat = (catId: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        setExpandedCategories(prev => ({
-            ...prev,
-            [catId]: !prev[catId]
-        }));
+        setExpandedDevCats(prev => ({ ...prev, [catId]: !prev[catId] }));
+    };
+
+    // 🆕 Toggle Logic for Cost Categories
+    const toggleCostCat = (catId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setExpandedCostCats(prev => ({ ...prev, [catId]: !prev[catId] }));
     };
 
     return (
@@ -99,7 +105,7 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                     <ListItemText primary="Project Overview" />
                 </ListItemButton>
 
-                {/* 2. DEVELOPMENT CATEGORIES ROOT (Renamed) */}
+                {/* 2. DEVELOPMENT CATEGORIES ROOT */}
                 <ListItemButton
                     selected={currentSelection.type === 'CATEGORY_LIST'}
                     onClick={() => onSelect({ type: 'CATEGORY_LIST' })}
@@ -114,15 +120,15 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                     </IconButton>
                 </ListItemButton>
 
-                {/* 3. DEVELOPMENT CATEGORY LIST (Hierarchy) */}
+                {/* 3. DEVELOPMENT CATEGORY LIST */}
                 <Collapse in={rootDevCategoriesOpen} timeout="auto" unmountOnExit>
                     <List component="div" disablePadding>
                         {devCategories.map((cat) => {
-                            const isExpanded = !!expandedCategories[cat.id];
+                            // 🔧 Use specific Dev state
+                            const isExpanded = !!expandedDevCats[cat.id];
 
                             return (
                                 <React.Fragment key={cat.id}>
-                                    {/* Category Item */}
                                     <ListItemButton
                                         selected={currentSelection.type === 'CATEGORY_DETAIL' && currentSelection.data?.id === cat.id}
                                         onClick={() => onSelect({ type: 'CATEGORY_DETAIL', data: cat })}
@@ -131,19 +137,15 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                                         <ListItemIcon sx={{ minWidth: 32 }}>
                                             <FolderOpen fontSize="small" color="action" />
                                         </ListItemIcon>
-
                                         <ListItemText
                                             primary={cat.title}
-                                            slotProps={{
-                                                primary: { noWrap: true, variant: 'caption' }
-                                            }}
+                                            slotProps={{ primary: { noWrap: true, variant: 'caption' } }}
                                         />
-
-                                        {/* Expand Arrow for Groups */}
+                                        {/* Expand Arrow */}
                                         {cat.groups && cat.groups.length > 0 && (
                                             <IconButton
                                                 size="small"
-                                                onClick={(e) => toggleCategory(cat.id, e)}
+                                                onClick={(e) => toggleDevCat(cat.id, e)} // 🔧 Use Dev Toggle
                                                 sx={{ p: 0.5 }}
                                             >
                                                 {isExpanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
@@ -151,7 +153,7 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                                         )}
                                     </ListItemButton>
 
-                                    {/* Nested Groups List */}
+                                    {/* Nested Dev Groups */}
                                     <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                                         <List component="div" disablePadding>
                                             {cat.groups?.map((grp: Group) => (
@@ -175,26 +177,18 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                                 </React.Fragment>
                             );
                         })}
-
-                        {devCategories.length === 0 && !loading && (
-                            <Typography variant="caption" sx={{ pl: 4, py: 1, display: 'block', color: 'text.secondary' }}>
-                                No categories found
-                            </Typography>
-                        )}
                     </List>
                 </Collapse>
 
-                {/* 4. COST CATEGORIES (NEW) */}
-                {/* This opens the Cost Category List Workspace */}
+                {/* 4. COST CATEGORIES ROOT */}
                 <ListItemButton
-                    // @ts-ignore - Remember to update SelectionType in Dashboard
+                    // @ts-ignore
                     selected={currentSelection.type === 'COST_CATEGORY_LIST'}
                     // @ts-ignore
                     onClick={() => onSelect({ type: 'COST_CATEGORY_LIST' })}
                 >
                     <ListItemIcon><MonetizationOn color="secondary" /></ListItemIcon>
                     <ListItemText primary="Cost Categories" />
-                    {/* Collapsible Toggle */}
                     <IconButton
                         size="small"
                         onClick={(e) => { e.stopPropagation(); setRootCostCategoriesOpen(!rootCostCategoriesOpen); }}
@@ -203,28 +197,70 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                     </IconButton>
                 </ListItemButton>
 
-                {/* 5. COST CATEGORY LIST ITEMS */}
+                {/* 5. COST CATEGORY LIST */}
                 <Collapse in={rootCostCategoriesOpen} timeout="auto" unmountOnExit>
                     <List component="div" disablePadding>
-                        {costCategories.map((costCat) => (
-                            <ListItemButton
-                                key={costCat.id}
-                                // @ts-ignore - Remember to update SelectionType in Dashboard
-                                selected={currentSelection.type === 'COST_CATEGORY_DETAIL' && currentSelection.data?.id === costCat.id}
-                                // @ts-ignore
-                                onClick={() => onSelect({ type: 'COST_CATEGORY_DETAIL', data: costCat })}
-                                sx={{ pl: 4 }}
-                            >
-                                <ListItemIcon sx={{ minWidth: 32 }}>
-                                    <AccountBalanceWallet fontSize="small" color="action" />
-                                </ListItemIcon>
-                                <ListItemText
-                                    disableTypography
-                                    primary={<Typography variant="caption" noWrap>{costCat.title}</Typography>}
-                                />
-                            </ListItemButton>
-                        ))}
+                        {costCategories.map((costCat) => {
+                            // 🆕 Use specific Cost state
+                            const isExpanded = !!expandedCostCats[costCat.id];
 
+                            return (
+                                <React.Fragment key={costCat.id}>
+                                    <ListItemButton
+                                        // @ts-ignore
+                                        selected={currentSelection.type === 'COST_CATEGORY_DETAIL' && currentSelection.data?.id === costCat.id}
+                                        // @ts-ignore
+                                        onClick={() => onSelect({ type: 'COST_CATEGORY_DETAIL', data: costCat })}
+                                        sx={{ pl: 4 }}
+                                    >
+                                        <ListItemIcon sx={{ minWidth: 32 }}>
+                                            <AccountBalanceWallet fontSize="small" color="action" />
+                                        </ListItemIcon>
+                                        <ListItemText
+                                            disableTypography
+                                            primary={<Typography variant="caption" noWrap>{costCat.title}</Typography>}
+                                        />
+                                        
+                                        {/* 🆕 Toggle Button for Cost Category */}
+                                        {costCat.groups && costCat.groups.length > 0 && (
+                                            <IconButton
+                                                size="small"
+                                                onClick={(e) => toggleCostCat(costCat.id, e)} // 🆕 Use Cost Toggle
+                                                sx={{ p: 0.5 }}
+                                            >
+                                                {isExpanded ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+                                            </IconButton>
+                                        )}
+                                    </ListItemButton>
+
+                                    {/* 🆕 Nested Cost Groups */}
+                                    <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                                        <List component="div" disablePadding>
+                                            {costCat.groups?.map((grp: CostGroup) => (
+                                                <ListItemButton
+                                                    key={grp.id}
+                                                    // @ts-ignore - Ensure Dashboard has 'COST_GROUP_DETAIL'
+                                                    selected={currentSelection.type === 'COST_GROUP_DETAIL' && currentSelection.data?.id === grp.id}
+                                                    // 🆕 Pass Group AND Parent Category Data
+                                                    // @ts-ignore
+                                                    onClick={() => onSelect({ type: 'COST_GROUP_DETAIL', data: { ...grp, category: costCat } })}
+                                                    sx={{ pl: 8 }}
+                                                >
+                                                    <ListItemIcon sx={{ minWidth: 24 }}>
+                                                        <ReceiptLong fontSize="small" sx={{ fontSize: 16, color: '#757575' }} />
+                                                    </ListItemIcon>
+                                                    <ListItemText
+                                                        primary={grp.title}
+                                                        primaryTypographyProps={{ noWrap: true, variant: 'caption' }}
+                                                    />
+                                                </ListItemButton>
+                                            ))}
+                                        </List>
+                                    </Collapse>
+                                </React.Fragment>
+                            );
+                        })}
+                        
                         {costCategories.length === 0 && !loading && (
                             <Typography variant="caption" sx={{ pl: 4, py: 1, display: 'block', color: 'text.secondary' }}>
                                 No cost categories found
@@ -232,7 +268,6 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({
                         )}
                     </List>
                 </Collapse>
-
 
             </List>
         </Box>
